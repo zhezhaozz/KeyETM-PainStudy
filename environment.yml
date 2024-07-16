@@ -1,0 +1,14 @@
+name: keyetm_pain
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - gensim
+  - nltk
+  - numpy
+  - scikit-learn
+  - pytorch::pytorch
+  - torchaudio
+  - torchvision
+  - pandas
+prefix: /Users/zhezhao/miniconda3/envs/keyetm_pain
