@@ -352,7 +352,7 @@ def initialize_embeddings(vocab,vectors):
                 model_embeddings[i] = vectors[word]
             except KeyError:
                 model_embeddings[i] = np.random.normal(
-                    scale=0.6, size=(self.emb_size, ))
+                    scale=0.6, size=(300, ))
         return model_embeddings
 
 

@@ -1,1 +1,3 @@
 .DS_Store
+embedded_topic_model/*/__pycache__
+Data/*/result

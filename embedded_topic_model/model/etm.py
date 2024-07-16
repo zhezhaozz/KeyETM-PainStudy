@@ -8,7 +8,7 @@ from typing import List
 from torch import optim
 from gensim.models import KeyedVectors
 
-from embedded_topic_model.models.model import Model
+from embedded_topic_model.model.model import Model
 from embedded_topic_model.utils import data
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.utils import metrics
@@ -114,8 +114,8 @@ class ETM(object):
         device = 'cpu'
         if torch.cuda.is_available():
             device = 'cuda'
-        elif torch.backends.mps.is_available():
-            device = 'mps'
+        #elif torch.backends.mps.is_available():
+        #    device = 'mps'
         self.device = torch.device(device)
         torch.manual_seed(self.seed)
 
@@ -568,7 +568,7 @@ class ETM(object):
                     self.device)
                 sums = data_batch.sum(1).unsqueeze(1)
                 normalized_data_batch = data_batch / sums if self.bow_norm else data_batch
-                theta, _ = self.model.get_theta(normalized_data_batch)
+                theta, _, _ = self.model.get_theta(normalized_data_batch)
 
                 thetas.append(theta)
 
