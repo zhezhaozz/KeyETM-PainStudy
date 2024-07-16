@@ -2,9 +2,11 @@ from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
 from scipy import sparse
 from typing import Tuple, List
+import torch
 
 
 def _remove_empty_documents(documents):
+    print([idx for idx,doc in  zip(range(len(documents)),documents) if doc == []])
     return [doc for doc in documents if doc != []]
 
 
@@ -202,11 +204,11 @@ def create_etm_datasets(
     num_docs = signed_documents.shape[0]
     train_dataset_size = int(np.floor(train_size * num_docs))
     test_dataset_size = int(num_docs - train_dataset_size)
-    idx_permute = np.random.permutation(num_docs).astype(int)
+    #idx_permute = np.random.permutation(num_docs).astype(int)
 
     # Remove words not in train_data
     vocabulary = list(set([w for idx_d in range(train_dataset_size)
-                           for w in documents_without_stop_words[idx_permute[idx_d]] if w in word2id]))
+                           for w in documents_without_stop_words[idx_d] if w in word2id]))
 
     # Create dictionary and inverse dictionary
     word2id, id2word = _create_dictionaries(vocabulary)
@@ -216,11 +218,11 @@ def create_etm_datasets(
             'vocabulary after removing words not in train: {}'.format(
                 len(vocabulary)))
 
-    docs_train = [[word2id[w] for w in documents_without_stop_words[idx_permute[idx_d]]
+    docs_train = [[word2id[w] for w in documents_without_stop_words[idx_d]
                    if w in word2id] for idx_d in range(train_dataset_size)]
     docs_test = [
         [word2id[w] for w in
-            documents_without_stop_words[idx_permute[idx_d + train_dataset_size]]
+            documents_without_stop_words[idx_d + train_dataset_size]
          if w in word2id] for idx_d in range(test_dataset_size)]
 
     if debug_mode:
@@ -332,3 +334,70 @@ def create_etm_datasets(
     }
 
     return vocabulary, train_dataset, test_dataset
+
+def initialize_embeddings(vocab,vectors):
+       
+
+        #if use_c_format_w2vec:
+           # vectors = self._get_embeddings_from_original_word2vec(embeddings)
+        #elif isinstance(embeddings, str):
+            #if self.debug_mode:
+                #print('Reading embeddings from word2vec file...')
+            #vectors = KeyedVectors.load(embeddings, mmap='r')
+
+        model_embeddings = np.zeros((len(vocab), 300))
+
+        for i, word in enumerate(vocab):
+            try:
+                model_embeddings[i] = vectors[word]
+            except KeyError:
+                model_embeddings[i] = np.random.normal(
+                    scale=0.6, size=(self.emb_size, ))
+        return model_embeddings
+
+
+
+def nearest_neighbors_m(query, vectors,thre):
+    #vectors = limit_embed.vectors
+    #index = vocab.index(word)
+    #query = vectors[index]
+    print(vectors.shape)
+    ranks = vectors.dot(query).squeeze()
+    print(ranks)
+    denom = query.T.dot(query).squeeze()
+    denom = denom * np.sum(vectors**2, 1)
+    denom = np.sqrt(denom)
+    ranks = ranks / denom
+    print(ranks)
+    return [(r,i) for r,i in zip(ranks,range(len(ranks))) if r>=thre]
+
+
+
+def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
+    limit_embed = initialize_embeddings(vocab,embeddings)
+    gamma_prior = np.zeros((len(vocab),n_latent))
+    gamma_prior_bin = np.zeros((bs,len(vocab), n_latent))
+    for idx_topic, seed_topic in enumerate(seedwords):
+        topic_vect = []
+        for idx_word, seed_word in enumerate(seed_topic):
+            idx_vocab = vocab.index(seed_word)
+            #print(seed_word)
+            #print(idx_vocab)
+            gamma_prior[idx_vocab, idx_topic] = 1.0 
+            gamma_prior_bin[:, idx_vocab, :]=1.0
+            topic_vect.append(embeddings[seed_word])
+        tv = sum(topic_vect)/len(topic_vect)
+        rank = nearest_neighbors_m(tv, limit_embed,0.5)
+        #print(rank)
+        for item in rank:
+            #print(vocab[item[1]])
+            if(gamma_prior[item[1], idx_topic]!=1.0):
+                 #gamma_prior[item[1], idx_topic]=round(item[0],2)
+                 gamma_prior[item[1], idx_topic]=1.0
+                 gamma_prior_bin[:, item[1], :]= 1.0
+    #print(gamma_prior[:250])
+    return torch.from_numpy(gamma_prior),torch.from_numpy(gamma_prior_bin)
+    
+def  read_seedword(seedword_path):
+    with open(seedword_path, 'r') as f:
+        return [l.replace('\n','').split(',') for l in f]
