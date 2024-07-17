@@ -68,15 +68,15 @@ def main():
     else:
          embeddings_mapping = embedding.create_word2vec_embedding_from_dataset(documents) 
          embeddings_mapping.save(os.path.join(model_path,'embeddings_mapping.kv')) 
-         df = pd.read_csv(data_path)
+         #df = pd.read_csv(data_path)
          #documents = df["summary"].tolist()
-         documents = df["text_cleaned"].tolist()
-         vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
-                                    documents,
-                                    min_df=0.01,
-                                    max_df=0.75,
-                                    train_size=1.0,
-                                    )
+         #documents = df["text_cleaned"].tolist()
+         #vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
+         #                           documents,
+         #                           min_df=0.01,
+         #                           max_df=1.0, #0.75,
+         #                           train_size=1.0,
+         #                           )
          with open(os.path.join(model_path,'train.pickle'), 'wb') as handle:
               pickle.dump(train_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
          with open(os.path.join(model_path,'vocabulary.pickle'), 'wb') as handle:

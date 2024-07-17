@@ -1,0 +1,17 @@
+dataset:
+  folder-path: 'Data/pain_study/'
+  result-file: 'result/'
+  data-file: 'pain_study_cleaned.csv'
+  sw-file: 'seedword.txt'
+  
+model:
+  bs: 45
+  nt: 6
+  epochs: 30
+  drop_out: 0.5
+  theta_act: "softplus"
+  lr: 0.005
+  lambda_theta: 35.0
+  lambda_alpha: 15.0
+  path: 'model/pain_study/'
+
