@@ -13,5 +13,6 @@ model:
   lr: 0.005
   lambda_theta: 35.0
   lambda_alpha: 15.0
-  path: 'model/pain_study/'
+  path: '/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study'
+  continue_train: False
 

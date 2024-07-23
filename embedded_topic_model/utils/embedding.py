@@ -1,4 +1,6 @@
-from gensim.models import Word2Vec, KeyedVectors
+import sent2vec
+
+from gensim.models import Word2Vec, KeyedVectors, FastText
 
 
 # Class for a memory-friendly iterator over the dataset
@@ -13,7 +15,7 @@ class MemoryFriendlyFileIterator(object):
 
 def create_word2vec_embedding_from_dataset(
         dataset, dim_rho=300, min_count=1, sg=1,
-        workers=25, negative_samples=10, window_size=4, iters=50,
+        workers=25, negative_samples=10, window_size=4, iters=50, 
         embedding_file_path=None, save_c_format_w2vec=False, debug_mode=False) -> KeyedVectors:
     """
     Creates a Word2Vec embedding from dataset file or a list of sentences.
@@ -73,6 +75,62 @@ def create_word2vec_embedding_from_dataset(
         window=window_size)
 
     embeddings = model.wv
+
+    if embedding_file_path is not None:
+        if debug_mode:
+            print('Saving word-vector mappings to file...')
+
+        embeddings.save(embedding_file_path)
+
+    if save_c_format_w2vec:
+        if debug_mode:
+            print('Saving BIN/TXT original C Word2vec files...')
+
+        embeddings.save_word2vec_format(
+            f'{embedding_file_path}.bin', binary=True)
+        embeddings.save_word2vec_format(
+            f'{embedding_file_path}.txt', binary=False)
+
+    return embeddings
+
+def create_word2vec_embedding_from_model(
+        dataset, model_name="biowordvec", continue_train=False, 
+        embedding_file_path=None, save_c_format_w2vec=False, debug_mode=False) -> KeyedVectors:
+    assert isinstance(dataset, str) or isinstance(dataset, list), \
+        'dataset must be file path or list of sentences'
+
+    if isinstance(dataset, str):
+        assert isinstance(embedding_file_path, str), \
+            'if dataset is a file path, an output embeddings file path must be given'
+
+    if save_c_format_w2vec:
+        assert isinstance(embedding_file_path, str), \
+            'if save_c_format_w2vec is True, an output embeddings file path must be given'
+
+    if debug_mode:
+        print('Creating memory-friendly iterator...')
+
+    sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
+        dataset, str) else [document.split() for document in dataset]
+
+    if debug_mode:
+        print('Training Word2Vec model with dataset...')
+
+    if model_name == "biowordvec":
+        model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioWordVec_PubMed_MIMICIII_d200.bin"
+        emb_model = FastText.load_fasttext_format(model_path)
+        if continue_train:
+            emb_model.build_vocab(sentences, update=True)
+            emb_model.train(sentences, total_examples=len(sentences), epochs=emb_model.epochs)
+        embeddings = emb_model.wv
+    elif model_name == "biosentvec":
+        model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioSentVec_PubMed_MIMICIII-bigram_d700.bin"
+        emb_model = sent2vec.Sent2vecModel()
+        emb_model.load_model(model_path)
+        if continue_train:
+            emb_model.build_vocab(sentences, update=True)
+            emb_model.train(sentences, total_examples=len(sentences), epochs=emb_model.epochs)
+        embeddings = emb_model.embed_sentences(sentences)
 
     if embedding_file_path is not None:
         if debug_mode:
