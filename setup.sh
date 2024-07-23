@@ -1,2 +1,2 @@
 export home=/home/zzhaozhe/Desktop/KeyETM-PainStudy
-export PYTHONPATH=$(PYTHONPATH):$(home)
+export PYTHONPATH=${PYTHONPATH}:${home}

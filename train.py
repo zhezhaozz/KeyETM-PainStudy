@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--config', type=str, default="configs/pain_study.yaml",
                         help="Which configuration to use. See into 'config' folder")
     parser.add_argument('--emb', type=str, default=None,
-                        help="Which embedding to use. The default is to train word2vec embedding using the training set")
+                        help="Which embedding to use. The default is to train word2vec embedding using the training set. Users can also input biowordvec and biosentvec")
     opt = parser.parse_args()
 
     with open(opt.config, 'r') as ymlfile:
@@ -65,8 +65,11 @@ def main():
     #Training word2vec embeddings
     print("Generating embeddings... \n")
     if opt.emb != None:
-        embeddings_mapping = embedding.create_word2vec_embedding_from_model(documents, model_name=opt.emb, continue_train=continue_train) 
-        embeddings_mapping.save(os.path.join(model_path,'embeddings_mapping.kv'))
+        if continue_train or opt.emb=="biosentvec":
+            embeddings_mapping = embedding.create_word2vec_embedding_from_model(documents, model_name=opt.emb, continue_train=continue_train) 
+            embeddings_mapping.save(os.path.join(model_path,f'{opt.emb}_embeddings_mapping_updated.kv'))
+        else:       
+            embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, f'{opt.emb}_embeddings_mapping.bin'), binary=True)
     else:
         if os.path.exists(os.path.join(model_path,'embeddings_mapping.kv')):
             embeddings_mapping = KeyedVectors.load(os.path.join(model_path,'embeddings_mapping.kv'))
