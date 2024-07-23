@@ -7,8 +7,10 @@ from gensim.models import KeyedVectors
 if __name__ == '__main__':
     df = pd.read_csv('Data/pain_study/test.csv')
     documents = df["text_cleaned"].tolist()
+    print("Data loaded \n")
 
     embeddings = embedding.create_word2vec_embedding_from_model(documents) 
+    print("Embeddings created \n")
 
     assert isinstance(
             embeddings, KeyedVectors), "embeddings isn't KeyedVectors instance"
@@ -19,6 +21,7 @@ if __name__ == '__main__':
                                     max_df=0.75,
                                     train_size=1.0,
                                     )
+    print("ETM dataset created \n")
     
     word_etm = etm.ETM(
             vocabulary,
@@ -27,3 +30,4 @@ if __name__ == '__main__':
             epochs=1,
             train_embeddings=False,
         )
+    print("ETM Model created \n")
