@@ -27,6 +27,8 @@ if __name__ == '__main__':
             vocabulary,
             embeddings=embeddings,
             num_topics=3,
+            rho_size=200,
+            emb_size=200,
             epochs=1,
             train_embeddings=False,
         )

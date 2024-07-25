@@ -1,8 +1,13 @@
-from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
+import torch
+import nltk
+#nltk.download('punkt')
+#nltk.download('stopwords')
 from scipy import sparse
 from typing import Tuple, List
-import torch
+from nltk.corpus import stopwords
+from string import punctuation
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 def _remove_empty_documents(documents):
@@ -401,3 +406,20 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
 def  read_seedword(seedword_path):
     with open(seedword_path, 'r') as f:
         return [l.replace('\n','').split(',') for l in f]
+    
+def preprocess_sentence(text, tknz=None, stop_words=None):
+    text = text.replace('/', ' / ')
+    text = text.replace('.-', ' .- ')
+    text = text.replace('.', ' . ')
+    text = text.replace('\'', ' \' ')
+    text = text.lower()
+
+    if stop_words == None:
+        stop_words = set(stopwords.words('english'))
+    
+    if tknz == None:
+        tknz = nltk.word_tokenize
+
+    tokens = [token for token in tknz(text) if token not in punctuation and token not in stop_words]
+
+    return ' '.join(tokens)

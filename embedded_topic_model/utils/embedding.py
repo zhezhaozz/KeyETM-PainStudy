@@ -1,6 +1,7 @@
 import sent2vec
 
 from gensim.models import Word2Vec, KeyedVectors, FastText
+from embedded_topic_model.utils.preprocessing import preprocess_sentence
 
 
 # Class for a memory-friendly iterator over the dataset
@@ -94,7 +95,7 @@ def create_word2vec_embedding_from_dataset(
     return embeddings
 
 def create_word2vec_embedding_from_model(
-        dataset, model_name="biowordvec", continue_train=False, 
+        dataset, model_name="biowordvec", continue_train=False, num_epochs=None,
         embedding_file_path=None, save_c_format_w2vec=False, debug_mode=False) -> KeyedVectors:
     assert isinstance(dataset, str) or isinstance(dataset, list), \
         'dataset must be file path or list of sentences'
@@ -110,28 +111,22 @@ def create_word2vec_embedding_from_model(
     if debug_mode:
         print('Creating memory-friendly iterator...')
 
-    sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
-        dataset, str) else [document.split() for document in dataset]
-
     if debug_mode:
         print('Training Word2Vec model with dataset...')
 
     if model_name == "biowordvec":
-        if continue_train:
-            model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioWordVec_PubMed_MIMICIII_d200.bin"
-            emb_model = FastText.load_fasttext_format(model_path)
-            emb_model.build_vocab(sentences, update=True)
-            emb_model.train(sentences, total_examples=len(sentences), epochs=emb_model.epochs)
-            embeddings = emb_model.wv
-        else:
-            embeddings = KeyedVectors.load_word2vec_format("/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/biowordvec_embeddings_mapping.bin", binary=True)
+        sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
+        dataset, str) else [document.split() for document in dataset]
+        assert continue_train == False, "Do NOT try this or you will blow up your memory"
+        embeddings = KeyedVectors.load_word2vec_format("/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/biowordvec_embeddings_mapping.bin", binary=True)
     elif model_name == "biosentvec":
+        sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
+        dataset, str) else [preprocess_sentence(document) for document in dataset]
+        assert continue_train == False, "Continue training BioSent2Vec is not supported"
+        sentences = " ".join(sentences)
         model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioSentVec_PubMed_MIMICIII-bigram_d700.bin"
         emb_model = sent2vec.Sent2vecModel()
         emb_model.load_model(model_path)
-        if continue_train:
-            emb_model.build_vocab(sentences, update=True)
-            emb_model.train(sentences, total_examples=len(sentences), epochs=emb_model.epochs)
         embeddings = emb_model.embed_sentences(sentences)
 
     if embedding_file_path is not None:
