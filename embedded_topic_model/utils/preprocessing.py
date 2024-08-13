@@ -6,6 +6,7 @@ import nltk
 from scipy import sparse
 from typing import Tuple, List
 from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
 from string import punctuation
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -146,6 +147,8 @@ def create_bow_dataset(
 def create_etm_datasets(
         dataset: List[str],
         train_size=1.0,
+        stem_words=True,
+        stopwords=None,
         min_df=1,
         max_df=1.0,
         debug_mode=False) -> Tuple[list, dict, dict]:
@@ -175,9 +178,18 @@ def create_etm_datasets(
     vectorizer = CountVectorizer(min_df=min_df, max_df=max_df)
     vectorized_documents = vectorizer.fit_transform(dataset)
 
+    if stem_words:
+        stemmer = PorterStemmer()    
+        dataset = [
+            [stemmer.stem(word) for word in document.split()]
+        for document in dataset]
+
+    if stopwords is None:
+        stopwords_list = vectorizer.stop_words_
+
     documents_without_stop_words = [
         [word for word in document.split()
-            if word not in vectorizer.stop_words_]
+            if word not in stopwords_list]
         for document in dataset]
 
     signed_documents = vectorized_documents.sign()
@@ -403,9 +415,14 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
     #print(gamma_prior[:250])
     return torch.from_numpy(gamma_prior),torch.from_numpy(gamma_prior_bin)
     
-def  read_seedword(seedword_path):
+def  read_seedword(seedword_path, stem_words=True):
     with open(seedword_path, 'r') as f:
-        return [l.replace('\n','').split(',') for l in f]
+        lst=[l.replace('\n','').split(',') for l in f]
+        if stem_words:
+            lst = [
+                [PorterStemmer().stem(word) for word in seed]
+            for seed in lst]
+        return lst
     
 def preprocess_sentence(text, tknz=None, stop_words=None):
     text = text.replace('/', ' / ')

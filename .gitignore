@@ -1,5 +1,6 @@
 .DS_Store
 embedded_topic_model/*/__pycache__
 Data/*/result
-Data/pain_study
+Data/pain_study/*
+!Data/pain_study/preprocess_data.py
 model/pain_study
