@@ -2,11 +2,11 @@ dataset:
   folder-path: 'Data/pain_study/'
   result-file: 'result/'
   data-file: 'pain_study_cleaned.csv'
-  sw-file: 'seedword.txt'
+  sw-file: 'seedword2.txt'
   
 model:
   bs: 45
-  nt: 6
+  nt: 15
   epochs: 30
   drop_out: 0.5
   theta_act: "softplus"

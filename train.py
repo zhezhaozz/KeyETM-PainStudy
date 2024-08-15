@@ -6,7 +6,6 @@ import argparse
 import pickle
 import os
 import os.path as osp
-import sent2vec
 
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.model.etm import ETM
@@ -127,8 +126,12 @@ def main():
     print("Start training... \n")
     etm_instance.fit(train_dataset)
     topics = etm_instance.get_topics(20)
+    print("Training Done \n")
     topic_coherence = etm_instance.get_topic_coherence()
     topic_diversity = etm_instance.get_topic_diversity()
+    print(f'The topic coherence score is {topic_coherence} \n')
+    print(f'The topic diversity score is {topic_diversity} \n')
+
     topic_word = etm_instance.get_topic_word_dist()
     word_matrix = etm_instance.get_topic_word_matrix()
     write_to_file(res_data_path,'word_topic_dist.csv',topic_word)
