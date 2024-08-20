@@ -1,7 +1,7 @@
 dataset:
   folder-path: 'Data/pain_study/'
   result-file: 'result/'
-  data-file: 'pain_study_cleaned.csv'
+  data-file: 'pain_preprocessed_data.csv'
   sw-file: 'seedword2.txt'
   
 model:
