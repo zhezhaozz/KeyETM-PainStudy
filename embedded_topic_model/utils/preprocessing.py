@@ -150,7 +150,7 @@ def create_etm_datasets(
         stem_words=True,
         stopwords=None,
         min_df=1,
-        max_df=1.0,
+        max_df=100.0,
         debug_mode=False) -> Tuple[list, dict, dict]:
     """
     Creates vocabulary and train / test datasets from a given corpus. The vocabulary and datasets can
@@ -181,15 +181,15 @@ def create_etm_datasets(
     if stem_words:
         stemmer = PorterStemmer()    
         dataset = [
-            [stemmer.stem(word) for word in document.split()]
+            [stemmer.stem(word) for word in document[0].split()]
         for document in dataset]
 
     if stopwords is None:
-        stopwords_list = vectorizer.stop_words_
+        stopwords = vectorizer.stop_words_
 
     documents_without_stop_words = [
-        [word for word in document.split()
-            if word not in stopwords_list]
+        [word for word in document[0].split()
+            if word not in stopwords]
         for document in dataset]
 
     signed_documents = vectorized_documents.sign()
@@ -362,14 +362,14 @@ def initialize_embeddings(vocab,vectors):
                 #print('Reading embeddings from word2vec file...')
             #vectors = KeyedVectors.load(embeddings, mmap='r')
 
-        model_embeddings = np.zeros((len(vocab), 300))
+        model_embeddings = np.zeros((len(vocab), vectors.vector_size))
 
         for i, word in enumerate(vocab):
             try:
                 model_embeddings[i] = vectors[word]
             except KeyError:
                 model_embeddings[i] = np.random.normal(
-                    scale=0.6, size=(300, ))
+                    scale=0.6, size=(vectors.vector_size, ))
         return model_embeddings
 
 
@@ -397,11 +397,15 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
     for idx_topic, seed_topic in enumerate(seedwords):
         topic_vect = []
         for idx_word, seed_word in enumerate(seed_topic):
-            idx_vocab = vocab.index(seed_word)
-            #print(seed_word)
-            #print(idx_vocab)
-            gamma_prior[idx_vocab, idx_topic] = 1.0 
-            gamma_prior_bin[:, idx_vocab, :]=1.0
+            print(seed_word in vocab)
+            if seed_word in vocab:
+                idx_vocab = vocab.index(seed_word)
+                #print(seed_word)
+                #print(idx_vocab)
+                gamma_prior[idx_vocab, idx_topic] = 1.0 
+                gamma_prior_bin[:, idx_vocab, :]=1.0
+            else:
+                pass
             topic_vect.append(embeddings[seed_word])
         tv = sum(topic_vect)/len(topic_vect)
         rank = nearest_neighbors_m(tv, limit_embed,0.5)
