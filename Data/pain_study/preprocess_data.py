@@ -42,6 +42,10 @@ if __name__ == '__main__':
       pattern = r'[\r|\n|\t]'
       cleaned_dt['text_cleaned'] = cleaned_dt['text_cleaned'].str.replace(pattern, ' ', regex=True)
 
+      # remove "Project narrative before texts"
+      pattern = r'Project Narrative|PROJECT NARRATIVE|PUBLIC HEALTH RELEVANCE|Public Health Relevance|Project Summary|PROJECT SUMMARY|ABSTRACT|Abstract'
+      cleaned_dt['text_cleaned'] = cleaned_dt['text_cleaned'].str.replace(pattern, ' ', regex=True)
+
       # separate training set and testing set
       train_dt = cleaned_dt[cleaned_dt['primary_label'].isnull()] #648
       test_dt = cleaned_dt[cleaned_dt['primary_label'].notnull()] #47

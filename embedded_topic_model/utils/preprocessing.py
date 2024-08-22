@@ -188,7 +188,7 @@ def create_etm_datasets(
         stopwords = vectorizer.stop_words_
 
     documents_without_stop_words = [
-        [word for word in document[0].split()
+        [word for word in document.split()
             if word not in stopwords]
         for document in dataset]
 
