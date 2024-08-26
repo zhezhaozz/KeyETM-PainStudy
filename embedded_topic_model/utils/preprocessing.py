@@ -178,19 +178,24 @@ def create_etm_datasets(
     vectorizer = CountVectorizer(min_df=min_df, max_df=max_df)
     vectorized_documents = vectorizer.fit_transform(dataset)
 
-    if stem_words:
-        stemmer = PorterStemmer()    
-        dataset = [
-            [stemmer.stem(word) for word in document[0].split()]
-        for document in dataset]
-
     if stopwords is None:
         stopwords = vectorizer.stop_words_
 
-    documents_without_stop_words = [
-        [word for word in document.split()
-            if word not in stopwords]
+    if stem_words:
+        stemmer = PorterStemmer()    
+        dataset = [
+            [stemmer.stem(word) for word in document.split()]
         for document in dataset]
+        
+        documents_without_stop_words = [
+            [word for word in document
+                if word not in stopwords]
+            for document in dataset]
+    else:
+        documents_without_stop_words = [
+            [word for word in document.split()
+                if word not in stopwords]
+            for document in dataset]
 
     signed_documents = vectorized_documents.sign()
 
