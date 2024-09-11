@@ -1,18 +1,17 @@
-import pandas as pd
-import numpy as np
 import torch 
 import yaml
+import wandb
 import argparse
 import pickle
 import os
 import os.path as osp
+import pandas as pd
+import numpy as np
 
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.model.etm import ETM
 from embedded_topic_model.utils import preprocessing
 from gensim.models import KeyedVectors
-from gensim.models import FastText
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction import text 
 
 
@@ -23,6 +22,8 @@ def main():
                         help="Which configuration to use. See into 'config' folder")
     parser.add_argument('--emb', type=str, default=None,
                         help="Which embedding to use. The default is to train word2vec embedding using the training set. Users can also input biowordvec and biosentvec")
+    parser.add_argument('--project', type=str, default=None,
+                        help="Name of the project")
     opt = parser.parse_args()
 
     with open(opt.config, 'r') as ymlfile:
@@ -48,12 +49,12 @@ def main():
     lr = config_model['lr']
     model_path = config_model['path']    
     
+    wandb.init(project=opt.project, config=config_model)
 
     #load_data
     print("Loading data... \n")
     df = pd.read_csv(data_path)
     seedwords = preprocessing.read_seedword(seedword_path, stem_words=False)
-    print(seedwords)
     #documents = df["summary"].tolist()
     documents = df["text_cleaned"].tolist()
     stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
@@ -61,7 +62,7 @@ def main():
     vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
                                     documents,
                                     min_df=0.005,
-                                    max_df=0.75,
+                                    max_df=1.0,
                                     train_size=1.0,
                                     stopwords=stop_words,
                                     stem_words=False,
@@ -76,7 +77,8 @@ def main():
             embeddings_mapping.save(os.path.join(model_path,f'{opt.emb}_embeddings_mapping_updated.kv'))
         else:       
             print("Loading BioWord2Vec... \n")
-            embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, f'{opt.emb}_embeddings_mapping.bin'), binary=True)
+            embeddings_mapping = KeyedVectors.load(os.path.join(model_path, f'{opt.emb}_embeddings_mapping_updated.kv'))
+            #embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, f'{opt.emb}_embeddings_mapping.bin'), binary=True)
     else:
         if os.path.exists(os.path.join(model_path,'embeddings_mapping.kv')):
             embeddings_mapping = KeyedVectors.load(os.path.join(model_path,'embeddings_mapping.kv'))
@@ -121,7 +123,6 @@ def main():
                    lr = lr,
                    gamma_prior = gamma_prior,
                    gamma_prior_bin=gamma_prior_bin,
-                   debug_mode=True,
                    train_embeddings=False)
     
     #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,etm_instance.embeddings)

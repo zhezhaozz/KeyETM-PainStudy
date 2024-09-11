@@ -5,3 +5,4 @@ Data/pain_study/*
 !Data/pain_study/preprocess_data.py
 model/pain_study
 *.out
+wandb/

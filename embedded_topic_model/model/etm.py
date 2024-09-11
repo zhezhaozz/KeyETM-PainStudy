@@ -1,9 +1,12 @@
 from __future__ import print_function
 
-import torch
-import numpy as np
+import sys
 import os
 import math
+import wandb
+import torch
+import logging
+import numpy as np
 from typing import List
 from torch import optim
 from gensim.models import KeyedVectors
@@ -13,6 +16,9 @@ from embedded_topic_model.utils import data
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.utils import metrics
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 class ETM(object):
     """
@@ -81,7 +87,6 @@ class ETM(object):
         visualize_every=10,
         eval_batch_size=1000,
         eval_perplexity=False,
-        debug_mode=False,
     ):
         self.vocabulary = vocabulary
         self.vocabulary_size = len(self.vocabulary)
@@ -109,7 +114,6 @@ class ETM(object):
         self.visualize_every = visualize_every
         self.eval_batch_size = eval_batch_size
         self.eval_perplexity = eval_perplexity
-        self.debug_mode = debug_mode
 
         device = 'cpu'
         if torch.cuda.is_available():
@@ -138,8 +142,7 @@ class ETM(object):
             self.emb_size,
             self.embeddings,
             train_embeddings,
-            self.enc_drop,
-            self.debug_mode).to(
+            self.enc_drop).to(
             self.device)
         self.optimizer = self._get_optimizer(optimizer_type, lr, wdecay)
 
@@ -153,8 +156,7 @@ class ETM(object):
 
     def _get_embeddings_from_original_word2vec(self, embeddings_file):
         if self._get_extension(embeddings_file) == 'txt':
-            if self.debug_mode:
-                print('Reading embeddings from original word2vec TXT file...')
+            logger.info('Reading embeddings from original word2vec TXT file...')
             vectors = {}
             iterator = embedding.MemoryFriendlyFileIterator(embeddings_file)
             for line in iterator:
@@ -164,8 +166,7 @@ class ETM(object):
                     vectors[word] = vect
             return vectors
         elif self._get_extension(embeddings_file) == 'bin':
-            if self.debug_mode:
-                print('Reading embeddings from original word2vec BIN file...')
+            logger.info('Reading embeddings from original word2vec BIN file...')
             return KeyedVectors.load_word2vec_format(
                 embeddings_file, 
                 binary=True
@@ -183,8 +184,7 @@ class ETM(object):
         if use_c_format_w2vec:
             vectors = self._get_embeddings_from_original_word2vec(embeddings)
         elif isinstance(embeddings, str):
-            if self.debug_mode:
-                print('Reading embeddings from word2vec file...')
+            logger.info('Reading embeddings from word2vec file...')
             vectors = KeyedVectors.load(embeddings, mmap='r')
 
         model_embeddings = np.zeros((self.vocabulary_size, self.emb_size))
@@ -226,8 +226,7 @@ class ETM(object):
                 lambd=0.,
                 weight_decay=wdecay)
         else:
-            if self.debug_mode:
-                print('Defaulting to vanilla SGD')
+            logger.info('Defaulting to vanilla SGD')
             return optim.SGD(self.model.parameters(), lr=learning_rate)
 
     def _set_training_data(self, train_data):
@@ -281,6 +280,8 @@ class ETM(object):
                     self.model.parameters(), self.clip)
             self.optimizer.step()
 
+            acc_gl1 += GL1
+            acc_gl2 += GL2
             acc_gl_loss += torch.sum(GL1 + GL2).item()
             acc_loss += torch.sum(recon_loss).item()
             acc_kl_theta_loss += torch.sum(kld_theta).item()
@@ -294,11 +295,12 @@ class ETM(object):
 
         cur_loss = round(acc_loss / cnt, 2)
         cur_kl_theta = round(acc_kl_theta_loss / cnt, 2)
+        cur_GL1 = round(acc_gl1 / cnt, 2)
+        cur_GL2 = round(acc_gl2 / cnt, 2)
         cur_GL = round(acc_gl_loss / cnt, 2)
         cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
-
-        if self.debug_mode:
-            print('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
+        wandb.log({"epoch": epoch, "kl_loss": cur_kl_theta, "Rec_loss": cur_loss, "P_theta":cur_GL1, "P_alpha":cur_GL2, "NELBO":cur_real_loss})
+        logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
                 epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
 
     def _perplexity(self, test_data) -> float:
@@ -364,8 +366,7 @@ class ETM(object):
             cur_loss = acc_loss / cnt
             ppl_dc = round(math.exp(cur_loss), 1)
 
-            if self.debug_mode:
-                print(f'Document Completion Task Perplexity: {ppl_dc}')
+            logger.info(f'Document Completion Task Perplexity: {ppl_dc}')
 
             return ppl_dc
 
@@ -446,8 +447,9 @@ class ETM(object):
         best_val_ppl = 1e9
         all_val_ppls = []
 
-        if self.debug_mode:
-            print(f'Topics before training: {self.get_topics()}')
+        logger.info(f'Topics before training: {self.get_topics()}')
+
+        wandb.watch(self.model)
 
         for epoch in range(1, self.epochs):
             self._train(epoch)
@@ -468,10 +470,10 @@ class ETM(object):
 
                 all_val_ppls.append(val_ppl)
 
-            if self.debug_mode and (epoch % self.visualize_every == 0):
-                print(f'Topics: {self.get_topics()}')
-                print(f'Topics_coherence: {self.get_topic_coherence()}')
-                print(f'Topic_diversity: {self.get_topic_diversity()}')
+            if (epoch % self.visualize_every == 0):
+                logger.info(f'Topics: {self.get_topics()}')
+                logger.info(f'Topics_coherence: {self.get_topic_coherence()}')
+                logger.info(f'Topic_diversity: {self.get_topic_diversity()}')
 
         if self.model_path is not None:
             self._save_model(self.model_path)
@@ -667,6 +669,8 @@ class ETM(object):
 
         with open(model_path, 'wb') as file:
             torch.save(self.model, file)
+
+        wandb.save(model_path)
 
     def _load_model(self, model_path):
         assert os.path.exists(model_path), \
