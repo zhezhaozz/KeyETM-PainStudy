@@ -117,8 +117,15 @@ def create_word2vec_embedding_from_model(
     if model_name == "biowordvec":
         sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
         dataset, str) else [document.split() for document in dataset]
-        assert continue_train == False, "Do NOT try this or you will blow up your memory"
-        embeddings = KeyedVectors.load_word2vec_format("/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/biowordvec_embeddings_mapping.bin", binary=True)
+        # assert continue_train == False, "Do NOT try this or you will blow up your memory"
+        print("Loading the BioWordVec model... \n")
+        model = FastText.load_fasttext_format("/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioWordVec_PubMed_MIMICIII_d200.bin")
+        if continue_train:
+            print("Start to continue training... \n")
+            model.build_vocab(sentences, update=True)  # Update the vocabulary
+            model.train(sentences, total_examples=len(sentences), epochs=model.epochs)
+            embeddings = model.wv
+            print("Finished \n")
     elif model_name == "biosentvec":
         sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
         dataset, str) else [preprocess_sentence(document) for document in dataset]

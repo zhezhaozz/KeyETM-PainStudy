@@ -83,7 +83,7 @@ class ETM(object):
         anneal_lr=False,
         bow_norm=True,
         num_words=10,
-        log_interval=2,
+        log_interval=5,
         visualize_every=10,
         eval_batch_size=1000,
         eval_perplexity=False,
@@ -251,6 +251,8 @@ class ETM(object):
         acc_kl_theta_loss = 0
         cnt = 0
         acc_gl_loss = 0 
+        acc_gl1 = 0
+        acc_gl2 = 0
         indices = torch.randperm(self.num_docs_train)
         indices = torch.split(indices, self.batch_size)
         for idx, ind in enumerate(indices):
@@ -280,8 +282,8 @@ class ETM(object):
                     self.model.parameters(), self.clip)
             self.optimizer.step()
 
-            acc_gl1 += GL1
-            acc_gl2 += GL2
+            acc_gl1 += torch.sum(GL1).item()
+            acc_gl2 += torch.sum(GL2).item()
             acc_gl_loss += torch.sum(GL1 + GL2).item()
             acc_loss += torch.sum(recon_loss).item()
             acc_kl_theta_loss += torch.sum(kld_theta).item()
@@ -289,9 +291,12 @@ class ETM(object):
 
             if idx % self.log_interval == 0 and idx > 0:
                 cur_loss = round(acc_loss / cnt, 2)
+                cur_GL1 = round(acc_gl1 / cnt, 2)
+                cur_GL2 = round(acc_gl2 / cnt, 2)
                 cur_GL = round(acc_gl_loss / cnt, 2)
                 cur_kl_theta = round(acc_kl_theta_loss / cnt, 2)
                 cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
+                wandb.log({"kl_loss": cur_kl_theta, "Rec_loss": cur_loss, "P_theta":cur_GL1, "P_alpha":cur_GL2, "NELBO":cur_real_loss})
 
         cur_loss = round(acc_loss / cnt, 2)
         cur_kl_theta = round(acc_kl_theta_loss / cnt, 2)
@@ -299,7 +304,6 @@ class ETM(object):
         cur_GL2 = round(acc_gl2 / cnt, 2)
         cur_GL = round(acc_gl_loss / cnt, 2)
         cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
-        wandb.log({"epoch": epoch, "kl_loss": cur_kl_theta, "Rec_loss": cur_loss, "P_theta":cur_GL1, "P_alpha":cur_GL2, "NELBO":cur_real_loss})
         logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
                 epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
 
