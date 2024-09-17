@@ -14,4 +14,4 @@ model:
   lambda_theta: 35.0
   lambda_alpha: 15.0
   path: 'model/20newsgroup/'
-
+  continue_train: False

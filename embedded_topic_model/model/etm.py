@@ -7,6 +7,7 @@ import wandb
 import torch
 import logging
 import numpy as np
+import plotly.graph_objs as go
 from typing import List
 from torch import optim
 from gensim.models import KeyedVectors
@@ -87,6 +88,7 @@ class ETM(object):
         visualize_every=10,
         eval_batch_size=1000,
         eval_perplexity=False,
+        latent_diagnosis=False,
     ):
         self.vocabulary = vocabulary
         self.vocabulary_size = len(self.vocabulary)
@@ -114,6 +116,9 @@ class ETM(object):
         self.visualize_every = visualize_every
         self.eval_batch_size = eval_batch_size
         self.eval_perplexity = eval_perplexity
+        self.latent_diagnosis = latent_diagnosis
+        if self.latent_diagnosis:
+            self.latent_spaces = []
 
         device = 'cpu'
         if torch.cuda.is_available():
@@ -373,6 +378,40 @@ class ETM(object):
             logger.info(f'Document Completion Task Perplexity: {ppl_dc}')
 
             return ppl_dc
+    
+    def _collect_latent_param(self, data, batch_size=None):
+        self.model.eval()  
+
+        tokens = data['tokens']
+        counts = data['counts']
+        num_docs = len(tokens)
+
+        latent_space_epoch = []
+        with torch.no_grad():
+
+            indices = torch.tensor(range(num_docs))
+            if batch_size == None:
+                batch_size = self.batch_size
+
+            indices = torch.split(indices, batch_size)
+            
+            for idx, ind in enumerate(indices):
+                ind = ind.to(self.model.device)
+                data_batch = data.get_batch(
+                    tokens,
+                    counts,
+                    ind,
+                    self.vocabulary_size,
+                    self.device)
+                sums = data_batch.sum(1).unsqueeze(1)
+                normalized_data_batch = data_batch / sums if self.bow_norm else data_batch
+                mu_theta, logsigma_theta = self.model.encode(normalized_data_batch)
+                z = self.model.reparameterize(mu_theta, logsigma_theta)
+                latent_space_epoch.append(z.cpu())
+            
+        latent_space_epoch = torch.cat(latent_space_epoch).numpy()
+        return latent_space_epoch
+        
 
     def get_topics(self, top_n_words=10) -> List[str]:
         """
@@ -457,6 +496,10 @@ class ETM(object):
 
         for epoch in range(1, self.epochs):
             self._train(epoch)
+
+            if self.latent_diagnosis:
+                latent_space_epoch = self._collect_latent_param(data=test_data)
+                self.latent_spaces.append(latent_space_epoch)
 
             if self.eval_perplexity:
                 val_ppl = self._perplexity(
@@ -663,6 +706,26 @@ class ETM(object):
         with torch.no_grad():
             beta = self.model.get_beta().data.cpu().numpy()
             return metrics.get_topic_diversity(beta, top_n)
+    
+    def prepare_plotly_data(self):
+        data = []
+        for i, latent_space in enumerate(self.latent_spaces):
+            if latent_space.shape[1] > 2:
+                from sklearn.decomposition import PCA
+                pca = PCA(n_components=2)
+                pca_space = pca.fit_transform(latent_space)
+            
+            # Gather the trace for current epoch
+            trace = go.Scatter(
+                x=pca_space[:, 0], 
+                y=pca_space[:, 1], 
+                mode="markers",
+                marker=dict(size=4, opacity=0.6),
+                name=f"Epoch {i+1}",
+                visible=(i == 0)  # Only show the first epoch initially
+            )
+            data.append(trace)
+        return data
 
     def _save_model(self, model_path):
         assert self.model is not None, \

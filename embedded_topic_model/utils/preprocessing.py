@@ -383,26 +383,23 @@ def nearest_neighbors_m(query, vectors,thre):
     #vectors = limit_embed.vectors
     #index = vocab.index(word)
     #query = vectors[index]
-    print(vectors.shape)
     ranks = vectors.dot(query).squeeze()
-    print(ranks)
     denom = query.T.dot(query).squeeze()
     denom = denom * np.sum(vectors**2, 1)
     denom = np.sqrt(denom)
     ranks = ranks / denom
-    print(ranks)
     return [(r,i) for r,i in zip(ranks,range(len(ranks))) if r>=thre]
 
 
 
-def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
+def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings,threshold):
     limit_embed = initialize_embeddings(vocab,embeddings)
     gamma_prior = np.zeros((len(vocab),n_latent))
     gamma_prior_bin = np.zeros((bs,len(vocab), n_latent))
     for idx_topic, seed_topic in enumerate(seedwords):
         topic_vect = []
         for idx_word, seed_word in enumerate(seed_topic):
-            print(seed_word in vocab)
+            #print(seed_word in vocab)
             if seed_word in vocab:
                 idx_vocab = vocab.index(seed_word)
                 #print(seed_word)
@@ -410,13 +407,13 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
                 gamma_prior[idx_vocab, idx_topic] = 1.0 
                 gamma_prior_bin[:, idx_vocab, :]=1.0
             else:
+                print(seed_word)
                 pass
             topic_vect.append(embeddings[seed_word])
         tv = sum(topic_vect)/len(topic_vect)
-        rank = nearest_neighbors_m(tv, limit_embed,0.5)
+        rank = nearest_neighbors_m(tv, limit_embed,threshold)
         #print(rank)
         for item in rank:
-            #print(vocab[item[1]])
             if(gamma_prior[item[1], idx_topic]!=1.0):
                  #gamma_prior[item[1], idx_topic]=round(item[0],2)
                  gamma_prior[item[1], idx_topic]=1.0
@@ -424,7 +421,7 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings):
     #print(gamma_prior[:250])
     return torch.from_numpy(gamma_prior),torch.from_numpy(gamma_prior_bin)
     
-def  read_seedword(seedword_path, stem_words=True):
+def read_seedword(seedword_path, stem_words=True):
     with open(seedword_path, 'r') as f:
         lst=[l.replace('\n','').split(',') for l in f]
         if stem_words:

@@ -7,6 +7,8 @@ import os
 import os.path as osp
 import pandas as pd
 import numpy as np
+import plotly.graph_objs as go
+import plotly.io as pio
 
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.model.etm import ETM
@@ -14,8 +16,10 @@ from embedded_topic_model.utils import preprocessing
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction import text 
 
-
 def main():
+    torch.manual_seed(2019)
+    np.random.seed(2019)
+
     # set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="configs/pain_study.yaml",
@@ -45,6 +49,9 @@ def main():
     drop_out = config_model['drop_out']
     theta_act = config_model['theta_act']
     continue_train = config_model['continue_train']
+
+    config_debug = config['debug']
+    draw_latent = config_debug['draw_latent_space']
     
     lr = config_model['lr']
     model_path = config_model['path']    
@@ -107,9 +114,14 @@ def main():
             
     #create model
     print("Set up prior matrix... \n")
-    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping)
+    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.75)
     print(gamma_prior)
     #print(gamma_prior[:100])
+    if opt.project == "test_run":
+        emb_size=300
+    else:
+        emb_size=200
+
     etm_instance = ETM(
                    vocabulary,
                    batch_size = bs,
@@ -123,7 +135,10 @@ def main():
                    lr = lr,
                    gamma_prior = gamma_prior,
                    gamma_prior_bin=gamma_prior_bin,
-                   train_embeddings=False)
+                   rho_size=emb_size,
+                   emb_size=emb_size,
+                   train_embeddings=False,
+                   latent_diagnosis=draw_latent)
     
     #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,etm_instance.embeddings)
     #etm_instance.fit(train_dataset)
@@ -141,6 +156,10 @@ def main():
     topic_diversity = etm_instance.get_topic_diversity()
     print(f'The topic coherence score is {topic_coherence} \n')
     print(f'The topic diversity score is {topic_diversity} \n')
+
+    if draw_latent:
+        plt_data = etm_instance.prepare_plotly_data()
+        visualize_latent_spaces(plt_data, res_data_path, 'latent_space_animation.html')
 
     topic_word = etm_instance.get_topic_word_dist()
     word_matrix = etm_instance.get_topic_word_matrix()
@@ -214,6 +233,44 @@ def _visualize_word_embeddings(queries,model,vocabulary):
                     word, embeddings, vocabulary)
 
             return neighbors
+
+def visualize_latent_spaces(data, res_path, file_name):
+    # Create the layout with slider
+    layout = go.Layout(
+        title="Latent Space Embeddings over Epochs",
+        xaxis=dict(title='Latent Dimension 1'),
+        yaxis=dict(title='Latent Dimension 2'),
+        updatemenus=[dict(
+            type="buttons", 
+            showactive=False, 
+            buttons=[dict(label="Play",
+                        method="animate",
+                        args=[None, {"frame": {"duration": 500, "redraw": True},
+                                    "fromcurrent": True, "transition": {"duration": 300}}]),
+                    dict(label="Pause",
+                        method="animate",
+                        args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}])])]
+    )
+
+    # Create frames
+    frames = [go.Frame(data=[trace], name=str(i)) for i, trace in enumerate(data)]
+
+    # Create the figure
+    fig = go.Figure(data=data[:1], frames=frames, layout=layout)
+
+    # Add frame visibility update on slider change
+    fig.update(frames=frames)
+    fig.update_layout(
+        sliders=[{
+            "steps": [
+                {"method": "animate", "label": str(i+1), "args": [[str(i)], {"frame": {"duration": 300, "redraw": True}, "mode": "immediate"}]}
+                for i in range(len(frames))
+            ],
+            "active": 0,
+        }]
+    )
+
+    pio.write_html(fig, os.path.join(res_path,file_name))
 
 if __name__ == "__main__":
      main()
