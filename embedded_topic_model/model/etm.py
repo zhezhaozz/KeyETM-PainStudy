@@ -12,9 +12,7 @@ from torch import optim
 from gensim.models import KeyedVectors
 
 from embedded_topic_model.model.model import Model
-from embedded_topic_model.utils import data
-from embedded_topic_model.utils import embedding
-from embedded_topic_model.utils import metrics
+from embedded_topic_model.utils import data, embedding, metrics, scheduler
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -75,6 +73,10 @@ class ETM(object):
         lr_factor=4.0,
         epochs=20,
         optimizer_type='adam',
+        beta=1,
+        cyc_scheduler=None,
+        n_cycle=None,
+        ratio=None,
         seed=2019,
         enc_drop=0.0,
         clip=0.0,
@@ -114,6 +116,14 @@ class ETM(object):
         self.visualize_every = visualize_every
         self.eval_batch_size = eval_batch_size
         self.eval_perplexity = eval_perplexity
+        self.beta=beta
+        if cyc_scheduler == None:
+            self.scheduler = None
+        elif cyc_scheduler == "linear":
+            assert n_cycle is not None, "Error: n_cycle should not be None if cyclical scheduler is used"
+            assert ratio is not None, "Error: ratio should not be None if cyclical scheduler is used"
+            self.scheduler = scheduler.frange_cycle_linear(0,1,self.epochs,n_cycle,ratio)
+
 
         device = 'cpu'
         if torch.cuda.is_available():
@@ -245,7 +255,7 @@ class ETM(object):
         self.test_2_counts = test_data['test2']['counts']
         self.num_docs_test_2 = len(self.test_2_tokens)
 
-    def _train(self, epoch):
+    def _train(self, epoch, beta):
         self.model.train()
         acc_loss = 0
         acc_kl_theta_loss = 0
@@ -274,7 +284,7 @@ class ETM(object):
             recon_loss, kld_theta,GL1,GL2 = self.model(
                 data_batch, normalized_data_batch)
             
-            total_loss = recon_loss + kld_theta + GL1 + GL2
+            total_loss = recon_loss + beta*kld_theta + GL1 + GL2
             total_loss.backward()
 
             if self.clip > 0:
@@ -295,7 +305,7 @@ class ETM(object):
                 cur_GL2 = round(acc_gl2 / cnt, 2)
                 cur_GL = round(acc_gl_loss / cnt, 2)
                 cur_kl_theta = round(acc_kl_theta_loss / cnt, 2)
-                cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
+                cur_real_loss = round(cur_loss + beta*cur_kl_theta + cur_GL, 2)
                 wandb.log({"kl_loss": cur_kl_theta, "Rec_loss": cur_loss, "P_theta":cur_GL1, "P_alpha":cur_GL2, "NELBO":cur_real_loss})
 
         cur_loss = round(acc_loss / cnt, 2)
@@ -303,7 +313,7 @@ class ETM(object):
         cur_GL1 = round(acc_gl1 / cnt, 2)
         cur_GL2 = round(acc_gl2 / cnt, 2)
         cur_GL = round(acc_gl_loss / cnt, 2)
-        cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
+        cur_real_loss = round(cur_loss + beta*cur_kl_theta + cur_GL, 2)
         logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
                 epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
 
@@ -456,7 +466,12 @@ class ETM(object):
         wandb.watch(self.model)
 
         for epoch in range(1, self.epochs):
-            self._train(epoch)
+            if self.scheduler is not None:
+                beta = self.scheduler[epoch]
+            else:
+                beta=self.beta
+
+            self._train(epoch, beta)
 
             if self.eval_perplexity:
                 val_ppl = self._perplexity(

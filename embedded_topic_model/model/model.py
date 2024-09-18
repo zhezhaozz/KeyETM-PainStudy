@@ -74,8 +74,8 @@ class Model(nn.Module):
         self.en1_ac = self.theta_act
         self.en2_fc = nn.Linear(t_hidden_size, t_hidden_size)
         self.en2_ac = self.theta_act
+        #self.bn = nn.BatchNorm1d(t_hidden_size)
         
-               
         self.mu_q_theta = nn.Linear(t_hidden_size, num_topics, bias=True)
         self.mean_bn = nn.BatchNorm1d(num_topics)
         self.logsigma_q_theta = nn.Linear(t_hidden_size, num_topics, bias=True)
@@ -120,8 +120,10 @@ class Model(nn.Module):
         output: mu_theta, log_sigma_theta
         """
         encoded1 = self.en1_fc(bows)
+        #encoded1_bn = self.bn(encoded1)
         encoded1_ac = self.en1_ac(encoded1)
         encoded2 = self.en2_fc(encoded1_ac)
+        #encoded2_bn = self.bn(encoded2)
         encoded2_ac = self.en2_ac(encoded2)
         #q_theta = self.q_theta(bows)
         if self.enc_drop > 0:

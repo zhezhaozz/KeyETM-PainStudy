@@ -1,18 +1,17 @@
 dataset:
   folder-path: 'Data/pain_study/'
-  result-file: 'result/'
+  result-file: 'cyclical/'
   data-file: 'pain_preprocessed_data.csv'
   sw-file: 'seedword2.txt'
   
 model:
   bs: 25
   nt: 15
-  epochs: 240
-  drop_out: 0.5
+  epochs: 90
+  drop_out: 0
   theta_act: "softplus"
   lr: 0.0005
   lambda_theta: 35.0
-  lambda_alpha: 0.005
+  lambda_alpha: 15.0
   path: '/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study'
   continue_train: False
-

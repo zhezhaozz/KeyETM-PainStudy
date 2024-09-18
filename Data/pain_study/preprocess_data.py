@@ -35,6 +35,9 @@ if __name__ == '__main__':
       # only consider heal pain studies
       cleaned_dt = studies[(studies['pain_confirmed'] == 'Yes') | (studies['HEAL.Pain.'] == 'True')]
 
+      # remove duplicates
+      cleaned_dt = cleaned_dt.drop_duplicates(subset='title')
+
       # select relevant columns
       cleaned_dt = cleaned_dt[['ID', 'text_cleaned', 'primary_label','secondary_lebel','tertiary_label']]
 
@@ -50,6 +53,7 @@ if __name__ == '__main__':
       train_dt = cleaned_dt[cleaned_dt['primary_label'].isnull()] #648
       test_dt = cleaned_dt[cleaned_dt['primary_label'].notnull()] #47
 
+      print(f"Number of rows for cleaned data: {cleaned_dt.shape[0]}")
       print(f"Number of rows for training set: {train_dt.shape[0]}")
       print(f"Number of rows for testing set: {test_dt.shape[0]}")
 
