@@ -16,6 +16,8 @@ from sklearn.feature_extraction import text
 
 
 def main():
+    torch.manual_seed(2024)
+    np.random.seed(2024)
     # set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="configs/pain_study.yaml",
@@ -107,9 +109,15 @@ def main():
             
     #create model
     print("Set up prior matrix... \n")
-    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping)
+    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.75)
     print(gamma_prior)
     #print(gamma_prior[:100])
+
+    if opt.project == "test_run":
+        emb_size=300
+    else:
+        emb_size=200
+
     etm_instance = ETM(
                    vocabulary,
                    batch_size = bs,
@@ -123,6 +131,8 @@ def main():
                    lr = lr,
                    gamma_prior = gamma_prior,
                    gamma_prior_bin=gamma_prior_bin,
+                   rho_size=emb_size,
+                   emb_size=emb_size,
                    train_embeddings=False)
     
     #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,etm_instance.embeddings)
