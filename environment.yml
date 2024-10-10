@@ -2,13 +2,19 @@ name: keyetm_pain
 channels:
   - defaults
 dependencies:
-  - python=3.10
   - gensim
   - nltk
   - numpy
-  - scikit-learn
+  - pandas
+  - python=3.10
   - pytorch::pytorch
+  - scikit-learn
   - torchaudio
   - torchvision
-  - pandas
-prefix: /Users/zhezhao/miniconda3/envs/keyetm_pain
+  - scipy[version='<1.13']
+  - ipykernel
+  - openpyxl
+  - matplotlib
+  - conda-forge::wandb
+  - plotly::plotly
+prefix: /home/zzhaozhe/miniconda3/envs/keyetm_pain
