@@ -1,5 +1,3 @@
-import sent2vec
-
 from gensim.models import Word2Vec, KeyedVectors, FastText
 from embedded_topic_model.utils.preprocessing import preprocess_sentence
 
@@ -126,15 +124,15 @@ def create_word2vec_embedding_from_model(
             model.train(sentences, total_examples=len(sentences), epochs=model.epochs)
             embeddings = model.wv
             print("Finished \n")
-    elif model_name == "biosentvec":
-        sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
-        dataset, str) else [preprocess_sentence(document) for document in dataset]
-        assert continue_train == False, "Continue training BioSent2Vec is not supported"
-        sentences = " ".join(sentences)
-        model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioSentVec_PubMed_MIMICIII-bigram_d700.bin"
-        emb_model = sent2vec.Sent2vecModel()
-        emb_model.load_model(model_path)
-        embeddings = emb_model.embed_sentences(sentences)
+    #elif model_name == "biosentvec":
+    #    sentences = MemoryFriendlyFileIterator(dataset) if isinstance(
+    #    dataset, str) else [preprocess_sentence(document) for document in dataset]
+    #    assert continue_train == False, "Continue training BioSent2Vec is not supported"
+    #    sentences = " ".join(sentences)
+    #    model_path = "/nfs/turbo/umms-vgvinodv2/users/zzhaozhe/pain_study/BioSentVec_PubMed_MIMICIII-bigram_d700.bin"
+    #    emb_model = sent2vec.Sent2vecModel()
+    #    emb_model.load_model(model_path)
+    #    embeddings = emb_model.embed_sentences(sentences)
 
     if embedding_file_path is not None:
         if debug_mode:

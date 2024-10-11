@@ -87,6 +87,7 @@ class ETM(object):
         visualize_every=10,
         eval_batch_size=1000,
         eval_perplexity=False,
+        device="cpu",
     ):
         self.vocabulary = vocabulary
         self.vocabulary_size = len(self.vocabulary)
@@ -114,10 +115,11 @@ class ETM(object):
         self.visualize_every = visualize_every
         self.eval_batch_size = eval_batch_size
         self.eval_perplexity = eval_perplexity
-
-        device = 'cpu'
+        
         if torch.cuda.is_available():
-            device = 'cuda'
+            self.device = device
+        else:
+            self.device = "cpu"
         #elif torch.backends.mps.is_available():
         #    device = 'mps'
         self.device = torch.device(device)

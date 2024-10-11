@@ -11,7 +11,7 @@ import numpy as np
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.model.etm import ETM
 from embedded_topic_model.utils import preprocessing
-from gensim.models import KeyedVectors
+from gensim.models import KeyedVectors, FastText
 from sklearn.feature_extraction import text 
 
 
@@ -79,9 +79,11 @@ def main():
             embeddings_mapping.save(os.path.join(model_path,f'{opt.emb}_embeddings_mapping_updated.kv'))
         else:       
             print("Loading BioWord2Vec... \n")
-            embeddings_mapping = KeyedVectors.load(os.path.join(model_path, f'{opt.emb}_embeddings_mapping_updated.kv'))
-            #embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, f'{opt.emb}_embeddings_mapping.bin'), binary=True)
-    else:
+            #embeddings_mapping = KeyedVectors.load(os.path.join(model_path, f'{opt.emb}_embeddings_mapping_updated.kv'))
+            #embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.vec.bin'), binary=True)
+            embeddings_model = FastText.load_fasttext_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.bin'))
+            embeddings_mapping = embeddings_model.wv
+    else:   
         if os.path.exists(os.path.join(model_path,'embeddings_mapping.kv')):
             embeddings_mapping = KeyedVectors.load(os.path.join(model_path,'embeddings_mapping.kv'))
             with open(os.path.join(model_path,'vocabulary.pickle'), 'rb') as handle:
