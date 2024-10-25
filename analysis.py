@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 
 data_folder = 'Data/pain_study/'
-result_folder =os.path.join(data_folder, "result/")
+result_folder =os.path.join(data_folder, "benchmark/")
 pickle_file = os.path.join(result_folder, 'formatted_topic_word.pickle')
 
 # open formatted topic words

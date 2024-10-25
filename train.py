@@ -83,6 +83,7 @@ def main():
             #embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.vec.bin'), binary=True)
             embeddings_model = FastText.load_fasttext_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.bin'))
             embeddings_mapping = embeddings_model.wv
+            embeddings_model = None # free up some memory space
     else:   
         if os.path.exists(os.path.join(model_path,'embeddings_mapping.kv')):
             embeddings_mapping = KeyedVectors.load(os.path.join(model_path,'embeddings_mapping.kv'))

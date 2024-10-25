@@ -1,5 +1,4 @@
 from gensim.models import Word2Vec, KeyedVectors, FastText
-from embedded_topic_model.utils.preprocessing import preprocess_sentence
 
 
 # Class for a memory-friendly iterator over the dataset
