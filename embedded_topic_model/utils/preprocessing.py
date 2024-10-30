@@ -367,14 +367,14 @@ def initialize_embeddings(vocab,vectors):
                 #print('Reading embeddings from word2vec file...')
             #vectors = KeyedVectors.load(embeddings, mmap='r')
 
-        model_embeddings = np.zeros((len(vocab), vectors.vector_size))
+        model_embeddings = np.zeros((len(vocab), 768))
 
         for i, word in enumerate(vocab):
             try:
                 model_embeddings[i] = vectors[word]
             except KeyError:
                 model_embeddings[i] = np.random.normal(
-                    scale=0.6, size=(vectors.vector_size, ))
+                    scale=0.6, size=(768, ))
         return model_embeddings
 
 

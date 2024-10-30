@@ -67,16 +67,16 @@ vocabulary, _, _ = preprocessing.create_etm_datasets(
 
 # add seeds into vocabulary
 print("Loading seeds... \n")
-with open(seeds_file) as fin:
+with open(seeds_file) as fin, open(f'{data_file}/oov.txt', 'w') as fout:
 	for line in fin:
 		seeds = line.strip().split(',')
 		for seed in seeds:
 			if seed not in vocabulary:
-				print(seed)
+				fout.write(seed+'\n')
 				vocabulary.append(seed)
 
 # create embeddings for words
-print("create embeddings...")
+print(f"create embeddings in {args.model} space...")
 with torch.no_grad():
 	with open(bert_file, 'w') as f:
 		f.write(f'{len(vocabulary)} 768\n')

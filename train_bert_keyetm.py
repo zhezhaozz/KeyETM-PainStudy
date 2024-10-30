@@ -8,10 +8,8 @@ import os.path as osp
 import pandas as pd
 import numpy as np
 
-from embedded_topic_model.utils import embedding
 from embedded_topic_model.model.etm import ETM
 from embedded_topic_model.utils import preprocessing
-from gensim.models import KeyedVectors, FastText
 from sklearn.feature_extraction import text 
 
 
@@ -22,8 +20,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="configs/pain_study.yaml",
                         help="Which configuration to use. See into 'config' folder")
-    parser.add_argument('--emb', type=str, default=None,
-                        help="Which embedding to use. The default is to train word2vec embedding using the training set. Users can also input biowordvec and biosentvec")
+    parser.add_argument('--emb', type=str, default="bert",
+                        help="Which embedding to use. The default is BERT")
+    parser.add_argument('--use_iv', action="store_true",
+                        help="Whether to replace OOV with IV")
     parser.add_argument('--project', type=str, default=None,
                         help="Name of the project")
     opt = parser.parse_args()
@@ -32,12 +32,9 @@ def main():
          config = yaml.load(ymlfile, Loader=yaml.FullLoader)
 
     config_dataset = config['dataset']
-    res_data_path = osp.join(
-        config_dataset['folder-path'], config_dataset['result-file'])
-    seedword_path = osp.join(
-        config_dataset['folder-path'], config_dataset['sw-file'])
     data_path = osp.join(
         config_dataset['folder-path'], config_dataset['data-file'])
+    
     config_model = config['model']
     bs = config_model['bs']
     nt = config_model['nt']
@@ -46,9 +43,16 @@ def main():
     lambda_alpha = config_model['lambda_alpha']
     drop_out = config_model['drop_out']
     theta_act = config_model['theta_act']
-    continue_train = config_model['continue_train']
     
     lr = config_model['lr']
+    if opt.use_iv:
+        seeds_path = osp.join(config_dataset['folder-path'], f"keywords/keywords_{opt.emb}_5.txt")
+        res_data_path = osp.join(
+            config_dataset['folder-path'], "experiments/bert_iv")
+    else:
+        seeds_path = osp.join(config_dataset['folder-path'], "seedword2.txt")
+        res_data_path = osp.join(
+            config_dataset['folder-path'], "experiments/bert_oov")
     model_path = config_model['path']    
     
     wandb.init(project=opt.project, config=config_model)
@@ -56,12 +60,12 @@ def main():
     #load_data
     print("Loading data... \n")
     df = pd.read_csv(data_path)
-    seedwords = preprocessing.read_seedword(seedword_path, stem_words=False)
+    seedwords = preprocessing.read_seedword(seeds_path, stem_words=False)
     #documents = df["summary"].tolist()
     documents = df["text_cleaned"].tolist()
     stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
              'study'])
-    vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
+    vocabulary, train_dataset, _ = preprocessing.create_etm_datasets(
                                     documents,
                                     min_df=0.001,
                                     max_df=0.85,
@@ -72,40 +76,19 @@ def main():
     print("done \n")
 
     print("Generating embeddings... \n")
-    if opt.emb != None:
-        if continue_train or opt.emb=="biosentvec":
-            embeddings_mapping = embedding.create_word2vec_embedding_from_model(documents, model_name=opt.emb, continue_train=continue_train) 
-            embeddings_mapping.save(os.path.join(model_path,f'{opt.emb}_embeddings_mapping_updated.kv'))
-        elif opt.emb=="biowordvec":       
-            print("Loading BioWord2Vec... \n")
-            #embeddings_mapping = KeyedVectors.load(os.path.join(model_path, f'{opt.emb}_embeddings_mapping_updated.kv'))
-            #embeddings_mapping = KeyedVectors.load_word2vec_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.vec.bin'), binary=True)
-            embeddings_model = FastText.load_fasttext_format(os.path.join(model_path, 'BioWordVec_PubMed_MIMICIII_d200.bin'))
-            embeddings_mapping = embeddings_model.wv
-            embeddings_model = None # free up some memory space
-    else:   
-        if os.path.exists(os.path.join(model_path,'embeddings_mapping.kv')):
-            embeddings_mapping = KeyedVectors.load(os.path.join(model_path,'embeddings_mapping.kv'))
-            with open(os.path.join(model_path,'vocabulary.pickle'), 'rb') as handle:
-                vocabulary =pickle.load(handle)
-            with open(os.path.join(model_path,'train.pickle'), 'rb') as handle:
-                train_dataset = pickle.load(handle)
-        else:
-            embeddings_mapping = embedding.create_word2vec_embedding_from_dataset(documents) 
-            embeddings_mapping.save(os.path.join(model_path,'embeddings_mapping.kv')) 
-            #df = pd.read_csv(data_path)
-            #documents = df["summary"].tolist()
-            #documents = df["text_cleaned"].tolist()
-            #vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
-            #                           documents,
-            #                           min_df=0.01,
-            #                           max_df=1.0, #0.75,
-            #                           train_size=1.0,
-            #                           )
-            with open(os.path.join(model_path,'train.pickle'), 'wb') as handle:
-                pickle.dump(train_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            with open(os.path.join(model_path,'vocabulary.pickle'), 'wb') as handle:
-                pickle.dump(vocabulary, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    embeddings_file = osp.join(
+            config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}.txt")
+    embeddings_mapping = {}
+
+    with open(embeddings_file) as fin:
+        for line in fin:
+            data = line.strip().split()
+            if len(data) != 769:
+                continue
+            word = data[0]
+            emb = np.array([float(x) for x in data[1:]])
+            emb = emb / np.linalg.norm(emb)
+            embeddings_mapping[word] = emb
     
     print("done \n")
             
@@ -114,11 +97,6 @@ def main():
     gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.75)
     print(gamma_prior)
     #print(gamma_prior[:100])
-
-    if opt.project == "test_run":
-        emb_size=300
-    else:
-        emb_size=200
 
     etm_instance = ETM(
                    vocabulary,
@@ -133,8 +111,8 @@ def main():
                    lr = lr,
                    gamma_prior = gamma_prior,
                    gamma_prior_bin=gamma_prior_bin,
-                   rho_size=emb_size,
-                   emb_size=emb_size,
+                   rho_size=768,
+                   emb_size=768,
                    train_embeddings=False)
     
     #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,etm_instance.embeddings)
@@ -156,10 +134,10 @@ def main():
 
     topic_word = etm_instance.get_topic_word_dist()
     word_matrix = etm_instance.get_topic_word_matrix()
-    write_to_file(res_data_path,'word_topic_dist.csv',topic_word)
-    write_to_file(res_data_path,'doc_topic_dist.csv',etm_instance.get_document_topic_dist())
-    write_to_file(res_data_path,'word_matrix.csv',word_matrix)
-    write_in_format(res_data_path,'formatted_topic_word.pickle',word_matrix,topic_word)        
+    write_to_file(res_data_path,f'{opt.emb}_word_topic_dist.csv',topic_word,opt.emb)
+    write_to_file(res_data_path,f'{opt.emb}_doc_topic_dist.csv',etm_instance.get_document_topic_dist(),opt.emb)
+    write_to_file(res_data_path,f'{opt.emb}_word_matrix.csv',word_matrix,opt.emb)
+    write_in_format(res_data_path,f'{opt.emb}_formatted_topic_word.pickle',word_matrix,topic_word)        
 
 def write_in_format(res_path,file_name,words,topic_words):
     topic_words_dict = {}
@@ -174,18 +152,18 @@ def write_in_format(res_path,file_name,words,topic_words):
          pickle.dump(topic_words_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def write_to_file(res_path,file_name,results):
+def write_to_file(res_path,file_name,results, model_name):
     if(torch.is_tensor(results)):   
          df = pd.DataFrame(results.numpy())
     else:
          df = pd.DataFrame(results)
-    if(file_name == "doc_topic_dist.csv"):
+    if("doc_topic_dist.csv" in file_name):
          #df= df.drop(['Unnamed: 0'],axis=1)
          labels = []
          a = df.to_numpy()
          for i in range(len(a)):
              labels.append(np.asarray(a[i]).argmax())
-         with open(os.path.join(res_path,'ETM_labels_.csv'),'w') as f:
+         with open(os.path.join(res_path,f'{model_name}_ETM_labels_.csv'),'w') as f:
              for item in labels:
                  f.write(str(item))
                  f.write("\n")

@@ -14,6 +14,9 @@
 #SBATCH --account=vgvinodv99
 #SBATCH --partition=standard
 
-source activate base
-conda activate keyetm_pain
-python3 train.py --config configs/pain_study.yaml --emb biowordvec --project KeyETM_benchmark
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --project BERT_keyetm
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_abstract --project BERT_keyetm
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_fulltext --project BERT_keyetm
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --use_iv True --project BERT_keyetm
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_abstract --use_iv True --project BERT_keyetm
+python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_fulltext --use_iv True --project BERT_keyetm
