@@ -146,7 +146,8 @@ def create_bow_dataset(
 
 def create_etm_datasets(
         dataset: List[str],
-        train_size=1.0,
+        test_index: List[int],
+        test_labels,
         stem_words=True,
         stopwords=None,
         min_df=1,
@@ -224,12 +225,10 @@ def create_etm_datasets(
         print('Tokenizing documents and splitting into train/test...')
 
     num_docs = signed_documents.shape[0]
-    train_dataset_size = int(np.floor(train_size * num_docs))
-    test_dataset_size = int(num_docs - train_dataset_size)
     #idx_permute = np.random.permutation(num_docs).astype(int)
 
     # Remove words not in train_data
-    vocabulary = list(set([w for idx_d in range(train_dataset_size)
+    vocabulary = list(set([w for idx_d in range(num_docs)
                            for w in documents_without_stop_words[idx_d] if w in word2id]))
 
     # Create dictionary and inverse dictionary
@@ -241,21 +240,19 @@ def create_etm_datasets(
                 len(vocabulary)))
 
     docs_train = [[word2id[w] for w in documents_without_stop_words[idx_d]
-                   if w in word2id] for idx_d in range(train_dataset_size)]
-    docs_test = [
-        [word2id[w] for w in
-            documents_without_stop_words[idx_d + train_dataset_size]
-         if w in word2id] for idx_d in range(test_dataset_size)]
+                   if w in word2id] for idx_d in range(num_docs)]
+    docs_test = [[word2id[w] for w in documents_without_stop_words[idx_d]
+                  if w in word2id] for idx_d in test_index]
 
     if debug_mode:
         print(
             'Number of documents (train_dataset): {} [this should be equal to {}]'.format(
                 len(docs_train),
-                train_dataset_size))
+                num_docs))
         print(
             'Number of documents (test_dataset): {} [this should be equal to {}]'.format(
                 len(docs_test),
-                test_dataset_size))
+                len(test_index)))
 
     if debug_mode:
         print('Removing empty documents...')
@@ -270,42 +267,25 @@ def create_etm_datasets(
     words_train = [[id2word[w] for w in doc] for doc in docs_train]
     words_test = [[id2word[w] for w in doc] for doc in docs_test]
 
-    docs_test_h1 = [[w for i, w in enumerate(
-        doc) if i <= len(doc) / 2.0 - 1] for doc in docs_test]
-    docs_test_h2 = [[w for i, w in enumerate(
-        doc) if i > len(doc) / 2.0 - 1] for doc in docs_test]
-
     words_train = _create_list_words(docs_train)
     words_test = _create_list_words(docs_test)
-    words_ts_h1 = _create_list_words(docs_test_h1)
-    words_ts_h2 = _create_list_words(docs_test_h2)
 
     if debug_mode:
         print('len(words_train): ', len(words_train))
         print('len(words_test): ', len(words_test))
-        print('len(words_ts_h1): ', len(words_ts_h1))
-        print('len(words_ts_h2): ', len(words_ts_h2))
 
     doc_indices_train = _create_document_indices(docs_train)
     doc_indices_test = _create_document_indices(docs_test)
-    doc_indices_test_h1 = _create_document_indices(docs_test_h1)
-    doc_indices_test_h2 = _create_document_indices(docs_test_h2)
 
     if debug_mode:
         print('len(np.unique(doc_indices_train)): {} [this should be {}]'.format(
             len(np.unique(doc_indices_train)), len(docs_train)))
         print('len(np.unique(doc_indices_test)): {} [this should be {}]'.format(
             len(np.unique(doc_indices_test)), len(docs_test)))
-        print('len(np.unique(doc_indices_test_h1)): {} [this should be {}]'.format(
-            len(np.unique(doc_indices_test_h1)), len(docs_test_h1)))
-        print('len(np.unique(doc_indices_test_h2)): {} [this should be {}]'.format(
-            len(np.unique(doc_indices_test_h2)), len(docs_test_h2)))
 
     # Number of documents in each set
     n_docs_train = len(docs_train)
     n_docs_test = len(docs_test)
-    n_docs_test_h1 = len(docs_test_h1)
-    n_docs_test_h2 = len(docs_test_h2)
 
     bow_train = _create_bow(
         doc_indices_train,
@@ -317,23 +297,9 @@ def create_etm_datasets(
         words_test,
         n_docs_test,
         len(vocabulary))
-    bow_test_h1 = _create_bow(
-        doc_indices_test_h1,
-        words_ts_h1,
-        n_docs_test_h1,
-        len(vocabulary))
-    bow_test_h2 = _create_bow(
-        doc_indices_test_h2,
-        words_ts_h2,
-        n_docs_test_h2,
-        len(vocabulary))
 
     bow_train_tokens, bow_train_counts = _split_bow(bow_train, n_docs_train)
     bow_test_tokens, bow_test_counts = _split_bow(bow_test, n_docs_test)
-    bow_test_h1_tokens, bow_test_h1_counts = _split_bow(
-        bow_test_h1, n_docs_test_h1)
-    bow_test_h2_tokens, bow_test_h2_counts = _split_bow(
-        bow_test_h2, n_docs_test_h2)
 
     train_dataset = {
         'tokens': _to_numpy_array(bow_train_tokens),
@@ -344,15 +310,8 @@ def create_etm_datasets(
         'test': {
             'tokens': _to_numpy_array(bow_test_tokens),
             'counts': _to_numpy_array(bow_test_counts),
+            'labels': test_labels
         },
-        'test1': {
-            'tokens': _to_numpy_array(bow_test_h1_tokens),
-            'counts': _to_numpy_array(bow_test_h1_counts),
-        },
-        'test2': {
-            'tokens': _to_numpy_array(bow_test_h2_tokens),
-            'counts': _to_numpy_array(bow_test_h2_counts),
-        }
     }
 
     return vocabulary, train_dataset, test_dataset
