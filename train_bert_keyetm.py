@@ -94,7 +94,7 @@ def main():
             
     #create model
     print("Set up prior matrix... \n")
-    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.75)
+    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.95)
     print(gamma_prior)
     #print(gamma_prior[:100])
 
