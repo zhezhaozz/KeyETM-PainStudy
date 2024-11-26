@@ -10,6 +10,8 @@ import numpy as np
 from typing import List
 from torch import optim
 from gensim.models import KeyedVectors
+from sklearn.metrics import accuracy_score, hamming_loss, precision_score,\
+      recall_score, f1_score
 
 from embedded_topic_model.model.model import Model
 from embedded_topic_model.utils import data
@@ -68,7 +70,7 @@ class ETM(object):
         num_topics=50,
         rho_size=200,
         emb_size=200,
-        t_hidden_size=800,
+        t_hidden_size=128,
         theta_act='relu',
         train_embeddings=False,
         lr=0.005,
@@ -85,8 +87,6 @@ class ETM(object):
         num_words=10,
         log_interval=5,
         visualize_every=10,
-        eval_batch_size=1000,
-        eval_perplexity=False,
         device="cpu",
     ):
         self.vocabulary = vocabulary
@@ -113,8 +113,6 @@ class ETM(object):
         self.num_words = num_words
         self.log_interval = log_interval
         self.visualize_every = visualize_every
-        self.eval_batch_size = eval_batch_size
-        self.eval_perplexity = eval_perplexity
         
         if torch.cuda.is_available():
             self.device = device
@@ -231,21 +229,15 @@ class ETM(object):
             logger.info('Defaulting to vanilla SGD')
             return optim.SGD(self.model.parameters(), lr=learning_rate)
 
-    def _set_training_data(self, train_data):
+    def _set_data(self, train_data, test_data=None):
         self.train_tokens = train_data['tokens']
         self.train_counts = train_data['counts']
         self.num_docs_train = len(self.train_tokens)
-
-    def _set_test_data(self, test_data):
-        self.test_tokens = test_data['test']['tokens']
-        self.test_counts = test_data['test']['counts']
-        self.num_docs_test = len(self.test_tokens)
-        self.test_1_tokens = test_data['test1']['tokens']
-        self.test_1_counts = test_data['test1']['counts']
-        self.num_docs_test_1 = len(self.test_1_tokens)
-        self.test_2_tokens = test_data['test2']['tokens']
-        self.test_2_counts = test_data['test2']['counts']
-        self.num_docs_test_2 = len(self.test_2_tokens)
+        if test_data is not None:
+            self.test_tokens = test_data['tokens']
+            self.test_counts = test_data['counts']
+            self.test_labels = test_data['labels']
+            self.num_docs_test = len(self.test_tokens)
 
     def _train(self, epoch):
         self.model.train()
@@ -309,73 +301,6 @@ class ETM(object):
         logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
                 epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
 
-    def _perplexity(self, test_data) -> float:
-        """Computes perplexity on document completion for a given testing data.
-
-        The document completion task is described on the original ETM's article: https://arxiv.org/pdf/1907.04907.pdf
-
-        Parameters:
-        ===
-            test_data (dict): BOW testing dataset, split in tokens and counts and used for perplexity
-
-        Returns:
-        ===
-            float: perplexity score on document completion task
-        """
-        self._set_test_data(test_data)
-
-        self.model.eval()
-        with torch.no_grad():
-            # get \beta here
-            beta = self.model.get_beta()
-
-            # do dc here
-            acc_loss = 0
-            cnt = 0
-            indices_1 = torch.split(
-                torch.tensor(
-                    range(
-                        self.num_docs_test_1)),
-                self.eval_batch_size)
-            for idx, ind in enumerate(indices_1):
-                # get theta from first half of docs
-                data_batch_1 = data.get_batch(
-                    self.test_1_tokens,
-                    self.test_1_counts,
-                    ind,
-                    self.vocabulary_size,
-                    self.device)
-                sums_1 = data_batch_1.sum(1).unsqueeze(1)
-                if self.bow_norm:
-                    normalized_data_batch_1 = data_batch_1 / sums_1
-                else:
-                    normalized_data_batch_1 = data_batch_1
-                theta, _ = self.model.get_theta(normalized_data_batch_1)
-
-                # get prediction loss using second half
-                data_batch_2 = data.get_batch(
-                    self.test_2_tokens,
-                    self.test_2_counts,
-                    ind,
-                    self.vocabulary_size,
-                    self.device)
-                sums_2 = data_batch_2.sum(1).unsqueeze(1)
-                res = torch.mm(theta, beta)
-                preds = torch.log(res)
-                recon_loss = -(preds * data_batch_2).sum(1)
-
-                loss = recon_loss / sums_2.squeeze()
-                loss = loss.mean().item()
-                acc_loss += loss
-                cnt += 1
-
-            cur_loss = acc_loss / cnt
-            ppl_dc = round(math.exp(cur_loss), 1)
-
-            logger.info(f'Document Completion Task Perplexity: {ppl_dc}')
-
-            return ppl_dc
-
     def get_topics(self, top_n_words=10) -> List[str]:
         """
         Gets topics. By default, returns the 10 most relevant terms for each topic.
@@ -432,7 +357,7 @@ class ETM(object):
 
             return neighbors
 
-    def fit(self, train_data, test_data=None):
+    def fit(self, train_data, test_data=None, test_labels=None, threshold=0):
         """
         Trains the model with the given training data.
 
@@ -448,10 +373,7 @@ class ETM(object):
         ===
             self (ETM): the instance itself
         """
-        self._set_training_data(train_data)
-
-        best_val_ppl = 1e9
-        all_val_ppls = []
+        self._set_data(train_data, test_data)
 
         logger.info(f'Topics before training: {self.get_topics()}')
 
@@ -460,33 +382,23 @@ class ETM(object):
         for epoch in range(1, self.epochs):
             self._train(epoch)
 
-            if self.eval_perplexity:
-                val_ppl = self._perplexity(
-                    test_data)
-                if val_ppl < best_val_ppl:
-                    if self.model_path is not None:
-                        self._save_model(self.model_path)
-                    best_val_ppl = val_ppl
-                else:
-                    # check whether to anneal lr
-                    lr = self.optimizer.param_groups[0]['lr']
-                    if self.anneal_lr and (len(all_val_ppls) > self.nonmono and val_ppl > min(
-                            all_val_ppls[:-self.nonmono]) and lr > 1e-5):
-                        self.optimizer.param_groups[0]['lr'] /= self.lr_factor
-
-                all_val_ppls.append(val_ppl)
-
             if (epoch % self.visualize_every == 0):
                 logger.info(f'Topics: {self.get_topics()}')
-                logger.info(f'Topics_coherence: {self.get_topic_coherence()}')
-                logger.info(f'Topic_diversity: {self.get_topic_diversity()}')
+                logger.info(f'Hamming loss: {hamming_loss(self.test_labels, self.get_multi_label(threshold=threshold))}')
+                logger.info(f'Precision: {precision_score(y_true=self.test_labels, 
+                                                          y_pred=self.get_multi_label(threshold=threshold),
+                                                          average='samples')}')
+                logger.info(f'Recall: {recall_score(y_true=self.test_labels, 
+                                                          y_pred=self.get_multi_label(threshold=threshold),
+                                                          average='samples')}')
+                logger.info(f'F1 Measure: {f1_score(y_true=self.test_labels, 
+                                                          y_pred=self.get_multi_label(threshold=threshold),
+                                                          average='samples')}')
+                logger.info(f'Topics Coherence: {self.get_topic_coherence()}')
+                logger.info(f'Topic Diversity: {self.get_topic_diversity()}')
 
         if self.model_path is not None:
             self._save_model(self.model_path)
-
-        if self.eval_perplexity and self.model_path is not None:
-            self._load_model(self.model_path)
-            val_ppl = self._perplexity(train_data)
 
         return self
 
@@ -665,6 +577,42 @@ class ETM(object):
         with torch.no_grad():
             beta = self.model.get_beta().data.cpu().numpy()
             return metrics.get_topic_diversity(beta, top_n)
+    
+    def get_multi_label(self, threshold=0):
+        self.model = self.model.to(self.device)
+        self.model.eval()
+
+        # get predicted document-topic distribution
+        with torch.no_grad():
+            indices = torch.tensor(range(self.num_docs_test))
+            indices = torch.split(indices, self.batch_size)
+
+            thetas = []
+
+            for ind in indices:
+                data_batch = data.get_batch(
+                    self.test_tokens,
+                    self.test_counts,
+                    ind,
+                    self.vocabulary_size,
+                    self.device)
+                sums = data_batch.sum(1).unsqueeze(1)
+                normalized_data_batch = data_batch / sums if self.bow_norm else data_batch
+                theta, _, _ = self.model.get_theta(normalized_data_batch)
+
+                thetas.append(theta.data.cpu().numpy())
+            
+            doc_topic = np.concatenate(thetas, axis=0)
+            prediction = np.zeros_like(doc_topic)
+
+            for r in range(doc_topic.shape[0]):
+                top_3 = doc_topic[r,:].argsort()[-3:]
+                for idx in top_3:
+                    if doc_topic[r,idx] > threshold:
+                        prediction[r,idx] = 1
+
+            return prediction
+
 
     def _save_model(self, model_path):
         assert self.model is not None, \

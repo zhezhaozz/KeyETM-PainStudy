@@ -2,6 +2,7 @@ dataset:
   folder-path: 'Data/pain_study/'
   result-file: 'benchmark/'
   data-file: 'pain_preprocessed_data.csv'
+  test-file: 'test_data.csv'
   sw-file: 'seedword2.txt'
   
 model:

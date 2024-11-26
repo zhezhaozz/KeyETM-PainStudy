@@ -36,6 +36,8 @@ def main():
         config_dataset['folder-path'], config_dataset['result-file'])
     data_path = osp.join(
         config_dataset['folder-path'], config_dataset['data-file'])
+    test_path = osp.join(
+        config_dataset['folder-path'], config_dataset['test-file'])
     seedword_path = osp.join(
         config_dataset['folder-path'], config_dataset['sw-file'])
     config_model = config['model']
@@ -55,18 +57,19 @@ def main():
 
     #load_data
     print("Loading data... \n")
-    df = pd.read_csv(data_path)
+    pain_grants = pd.read_csv(data_path)
+    test_data = pd.read_csv(test_path)
+    test_index = test_data["index"].tolist()
+    test_labels = test_data["index"]
     seedwords = preprocessing.read_seedword(seedword_path, stem_words=False)
     #documents = df["summary"].tolist()
-    documents = df["text_cleaned"].tolist()
-    stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
-             'study'])
-    vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
+    documents = pain_grants["text_cleaned"].tolist()
+    vocabulary, train_dataset, _ = preprocessing.create_etm_datasets(
                                     documents,
+                                    test_index=test_index,
+                                    test_labels=test_labels,
                                     min_df=0.005,
-                                    max_df=1.0,
-                                    train_size=1.0,
-                                    stopwords=stop_words,
+                                    max_df=0.9,
                                     stem_words=False,
                                     )
     print("done \n")
@@ -159,7 +162,27 @@ def main():
     write_to_file(res_data_path,'word_topic_dist.csv',topic_word)
     write_to_file(res_data_path,'doc_topic_dist.csv',etm_instance.get_document_topic_dist())
     write_to_file(res_data_path,'word_matrix.csv',word_matrix)
-    write_in_format(res_data_path,'formatted_topic_word.pickle',word_matrix,topic_word)        
+    write_in_format(res_data_path,'formatted_topic_word.pickle',word_matrix,topic_word) 
+    write_topic_excel(os.path.join(res_data_path,'formatted_topic_word.pickle'), res_data_path)    
+
+def write_topic_excel(pickle_file, result_folder):
+    # open formatted topic words
+    with open(pickle_file, 'rb') as file:
+        # Load the pickle object.
+        loaded_object = pickle.load(file) # it's a dict
+
+    # save the topic word into an excel file
+    excel_writer = pd.ExcelWriter(os.path.join(result_folder,'topic-words.xlsx'), engine='openpyxl')
+
+    # Iterate over the dictionary and write each list of tuples to a separate sheet
+    for key, value in loaded_object.items():
+        # Convert the list of tuples to a DataFrame
+        df = pd.DataFrame(value, columns=["Term", "Probability"])
+        # Write the DataFrame to a sheet named after the key
+        df.to_excel(excel_writer, sheet_name=key, index=False)
+
+    # Save the Excel writer
+    excel_writer.close()   
 
 def write_in_format(res_path,file_name,words,topic_words):
     topic_words_dict = {}
