@@ -64,7 +64,7 @@ def main():
     seedwords = preprocessing.read_seedword(seedword_path, stem_words=False)
     #documents = df["summary"].tolist()
     documents = pain_grants["text_cleaned"].tolist()
-    vocabulary, train_dataset, _ = preprocessing.create_etm_datasets(
+    vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
                                     documents,
                                     test_index=test_index,
                                     test_labels=test_labels,
@@ -149,14 +149,10 @@ def main():
     #for i in range(5):
         #print("run_"+str(i))
     print("Start training... \n")
-    etm_instance.fit(train_dataset)
+    etm_instance.fit(train_dataset, test_data=test_dataset)
     topics = etm_instance.get_topics(50)
     print("Training Done \n")
-    topic_coherence = etm_instance.get_topic_coherence()
-    topic_diversity = etm_instance.get_topic_diversity()
-    print(f'The topic coherence score is {topic_coherence} \n')
-    print(f'The topic diversity score is {topic_diversity} \n')
-
+    
     topic_word = etm_instance.get_topic_word_dist()
     word_matrix = etm_instance.get_topic_word_matrix()
     write_to_file(res_data_path,'word_topic_dist.csv',topic_word)

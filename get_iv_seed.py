@@ -5,7 +5,7 @@ import argparse
 parser = argparse.ArgumentParser(description='main', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dataset', default='pain_study')
 parser.add_argument('--model', default='bert')
-parser.add_argument('--num_iter', default=4, type=int)
+parser.add_argument('--num_iter', default=2, type=int)
 parser.add_argument('--topm', default=10, type=int)
 args = parser.parse_args()
 
@@ -47,14 +47,19 @@ else:
 	num_iter += 1
 	out_file = f'{data_file}/keywords/keywords_{model}_{num_iter}.txt'
 
-with open(out_file, 'w') as fout:
-	for idx, topic in enumerate(topics):
-		word2score = defaultdict(float)
-		for word in word2emb:
-			if word in oov:
-				continue
-			for term in topic:
-				word2score[word] += np.dot(word2emb[word], word2emb[term])
-		score_sorted = sorted(word2score.items(), key=lambda x: x[1], reverse=True)[:100]
-		new_topic = [x[0] for x in score_sorted][:topm]
-		fout.write(','.join(new_topic)+'\n')
+print("Retrieving in-vocabulary seeds using {model} with {num_iter} iterations \n")
+for iter in range(num_iter):
+	print(f"Iteration: {iter} \n")
+	with open(out_file, 'w') as fout:
+		for idx, topic in enumerate(topics):
+			word2score = defaultdict(float)
+			for word in word2emb:
+				if word in oov:
+					continue
+				for term in topic:
+					word2score[word] += np.dot(word2emb[word], word2emb[term])
+			score_sorted = sorted(word2score.items(), key=lambda x: x[1], reverse=True)[:100]
+			new_topic = [x[0] for x in score_sorted][:topm]
+			topics[idx] = new_topic
+			print(','.join(new_topic)+'\n')
+			fout.write(','.join(new_topic)+'\n')

@@ -14,9 +14,30 @@
 #SBATCH --account=vgvinodv99
 #SBATCH --partition=standard
 
+python preprocess_data.py
+
+# use oov seeds only
+python get_oov_emb.py 
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --project BERT_keyetm
+
+python get_oov_emb.py --model pubmedbert_abstract
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_abstract --project BERT_keyetm
+
+python get_oov_emb.py --model pubmedbert_fulltext
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_fulltext --project BERT_keyetm
+
+# use IV seeds
+python get_oov_emb.py 
+python get_iv_seed.py --topm 15 
+python get_iv_emb.py 
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --use_iv --project BERT_keyetm
+
+python get_oov_emb.py --model pubmedbert_abstract
+python get_iv_seed.py --model pubmedbert_abstract --topm 15
+python get_iv_emb.py --model pubmedbert_abstract
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_abstract --use_iv --project BERT_keyetm
+
+python get_oov_emb.py --model pubmedbert_fulltext
+python get_iv_seed.py --model pubmedbert_fulltext --topm 15
+python get_iv_emb.py --model pubmedbert_fulltext
 python train_bert_keyetm.py --config configs/bert_keyetm.yaml --emb pubmedbert_fulltext --use_iv --project BERT_keyetm

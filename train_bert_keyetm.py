@@ -1,3 +1,5 @@
+import sys
+import logging
 import torch 
 import yaml
 import wandb
@@ -10,7 +12,7 @@ import numpy as np
 
 from embedded_topic_model.model.etm import ETM
 from embedded_topic_model.utils import preprocessing
-from sklearn.feature_extraction import text 
+from gensim.models import KeyedVectors
 
 
 def main():
@@ -34,7 +36,8 @@ def main():
     config_dataset = config['dataset']
     data_path = osp.join(
         config_dataset['folder-path'], config_dataset['data-file'])
-    
+    test_path = osp.join(
+        config_dataset['folder-path'], config_dataset['test-file'])
     config_model = config['model']
     bs = config_model['bs']
     nt = config_model['nt']
@@ -53,53 +56,70 @@ def main():
         seeds_path = osp.join(config_dataset['folder-path'], "seedword2.txt")
         res_data_path = osp.join(
             config_dataset['folder-path'], "experiments/bert_oov")
-    model_path = config_model['path']    
     
     wandb.init(project=opt.project, config=config_model)
 
+    # set up logger
+    logger = logging.getLogger(__name__)
+    if opt.use_iv:
+        logging.basicConfig(filename=f"{config_dataset['folder-path']}/logs/output_{opt.emb}_iv.log", filemode='w', level=logging.DEBUG)
+    else:
+        logging.basicConfig(filename=f"{config_dataset['folder-path']}/logs/output_{opt.emb}.log", filemode='w', level=logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
     #load_data
     print("Loading data... \n")
-    df = pd.read_csv(data_path)
+    pain_grants = pd.read_csv(data_path)
+    test_data = pd.read_csv(test_path)
+    test_index = test_data["Index"].tolist()
+    lab_cols = [col for col in test_data.columns if col.startswith("label_")]
+    lab_cols = sorted(lab_cols)
+    test_labels = test_data[lab_cols].to_numpy()
     seedwords = preprocessing.read_seedword(seeds_path, stem_words=False)
     #documents = df["summary"].tolist()
-    documents = df["text_cleaned"].tolist()
-    stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
-             'study'])
-    vocabulary, train_dataset, _ = preprocessing.create_etm_datasets(
+    documents = pain_grants["combined_text"].tolist()
+    vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
                                     documents,
-                                    min_df=0.001,
-                                    max_df=0.85,
-                                    train_size=1.0,
-                                    stopwords=stop_words,
+                                    test_index=test_index,
+                                    test_labels=test_labels,
+                                    min_df=0.005,
+                                    max_df=0.9,
                                     stem_words=False,
                                     )
     print("done \n")
-
-    print("Generating embeddings... \n")
-    embeddings_file = osp.join(
-            config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}.txt")
-    embeddings_mapping = {}
-
-    with open(embeddings_file) as fin:
-        for line in fin:
-            data = line.strip().split()
-            if len(data) != 769:
-                continue
-            word = data[0]
-            emb = np.array([float(x) for x in data[1:]])
-            emb = emb / np.linalg.norm(emb)
-            embeddings_mapping[word] = emb
-    
-    print("done \n")
             
     #create model
+    print("Load embeddings... \n")
+    if opt.use_iv:
+        embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}_iv")
+        embeddings_raw = KeyedVectors.load(embeddings_file)
+        embeddings_mapping = {}
+        for word in embeddings_raw.index_to_key:
+            emb = embeddings_raw[word]
+            emb = emb / np.linalg.norm(emb)
+            embeddings_mapping[word] = emb
+    else:
+        embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}.txt")
+        embeddings_mapping = {}
+        with open(embeddings_file) as fin:
+            for line in fin:
+                data = line.strip().split()
+                if len(data) != 769:
+                    continue
+                word = data[0]
+                emb = np.array([float(x) for x in data[1:]])
+                emb = emb / np.linalg.norm(emb)
+                embeddings_mapping[word] = emb
+    
     print("Set up prior matrix... \n")
-    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.95)
-    print(gamma_prior)
+    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.90)
+
     #print(gamma_prior[:100])
 
     etm_instance = ETM(
                    vocabulary,
+                   logger=logger,
                    batch_size = bs,
                    embeddings=embeddings_mapping,
                    num_topics=nt,
@@ -124,13 +144,9 @@ def main():
     #for i in range(5):
         #print("run_"+str(i))
     print("Start training... \n")
-    etm_instance.fit(train_dataset)
+    etm_instance.fit(train_dataset, test_dataset, label_threshold=0.0714)
     topics = etm_instance.get_topics(50)
     print("Training Done \n")
-    topic_coherence = etm_instance.get_topic_coherence()
-    topic_diversity = etm_instance.get_topic_diversity()
-    print(f'The topic coherence score is {topic_coherence} \n')
-    print(f'The topic diversity score is {topic_diversity} \n')
 
     topic_word = etm_instance.get_topic_word_dist()
     word_matrix = etm_instance.get_topic_word_matrix()
@@ -138,6 +154,23 @@ def main():
     write_to_file(res_data_path,f'{opt.emb}_doc_topic_dist.csv',etm_instance.get_document_topic_dist(),opt.emb)
     write_to_file(res_data_path,f'{opt.emb}_word_matrix.csv',word_matrix,opt.emb)
     write_in_format(res_data_path,f'{opt.emb}_formatted_topic_word.pickle',word_matrix,topic_word)        
+    write_topic_excel(os.path.join(res_data_path,f'{opt.emb}_formatted_topic_word.pickle'), res_data_path)    
+
+def write_topic_excel(pickle_file, result_folder):
+    # open formatted topic words
+    with open(pickle_file, 'rb') as file:
+        # Load the pickle object.
+        loaded_object = pickle.load(file) # it's a dict
+
+    # save the topic word into an excel file
+    excel_writer = pd.ExcelWriter(os.path.join(result_folder,'topic-words.xlsx'), engine='openpyxl')
+
+    # Iterate over the dictionary and write each list of tuples to a separate sheet
+    for key, value in loaded_object.items():
+        # Convert the list of tuples to a DataFrame
+        df = pd.DataFrame(value, columns=["Term", "Probability"])
+        # Write the DataFrame to a sheet named after the key
+        df.to_excel(excel_writer, sheet_name=key, index=False)
 
 def write_in_format(res_path,file_name,words,topic_words):
     topic_words_dict = {}

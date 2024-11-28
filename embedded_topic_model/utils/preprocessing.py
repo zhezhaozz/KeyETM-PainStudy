@@ -5,7 +5,7 @@ import nltk
 #nltk.download('stopwords')
 from scipy import sparse
 from typing import Tuple, List
-from nltk.corpus import stopwords
+import nltk.corpus 
 from nltk.stem.porter import PorterStemmer
 from string import punctuation
 from sklearn.feature_extraction.text import CountVectorizer
@@ -152,7 +152,7 @@ def create_etm_datasets(
         stopwords=None,
         min_df=1,
         max_df=100.0,
-        debug_mode=False) -> Tuple[list, dict, dict]:
+        debug_mode=True) -> Tuple[list, dict, dict]:
     """
     Creates vocabulary and train / test datasets from a given corpus. The vocabulary and datasets can
     be used to train an ETM model.
@@ -180,7 +180,7 @@ def create_etm_datasets(
     vectorized_documents = vectorizer.fit_transform(dataset)
 
     if stopwords is None:
-        stopwords = vectorizer.stop_words_
+        stopwords = set(nltk.corpus.stopwords.words('english'))
 
     if stem_words:
         stemmer = PorterStemmer()    
@@ -307,11 +307,9 @@ def create_etm_datasets(
     }
 
     test_dataset = {
-        'test': {
-            'tokens': _to_numpy_array(bow_test_tokens),
-            'counts': _to_numpy_array(bow_test_counts),
-            'labels': test_labels
-        },
+        'tokens': _to_numpy_array(bow_test_tokens),
+        'counts': _to_numpy_array(bow_test_counts),
+        'labels': test_labels
     }
 
     return vocabulary, train_dataset, test_dataset
@@ -366,7 +364,6 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings,threshold):
                 gamma_prior[idx_vocab, idx_topic] = 1.0 
                 gamma_prior_bin[:, idx_vocab, :]=1.0
             else:
-                print(seed_word)
                 pass
             topic_vect.append(embeddings[seed_word])
         tv = sum(topic_vect)/len(topic_vect)
@@ -397,7 +394,7 @@ def preprocess_sentence(text, tknz=None, stop_words=None):
     text = text.lower()
 
     if stop_words == None:
-        stop_words = set(stopwords.words('english'))
+        stop_words = set(nltk.corpus.stopwords.words('english'))
     
     if tknz == None:
         tknz = nltk.word_tokenize

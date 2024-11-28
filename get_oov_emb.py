@@ -36,6 +36,7 @@ else:
 if args.dataset == 'pain_study':
 	data_file = f'Data/{args.dataset}'
 	corpus_file = f'Data/{args.dataset}/pain_preprocessed_data.csv'
+	test_file = f'Data/{args.dataset}/test_data.csv'
 else:
 	corpus_file = f'Data/{args.dataset}.csv'
 
@@ -49,22 +50,24 @@ model.eval()
 
 # load data
 print("Loading data... \n")
-df = pd.read_csv('Data/pain_study/pain_preprocessed_data.csv')
+df = pd.read_csv(corpus_file)
+test_data = pd.read_csv(test_file)
+test_index = test_data["Index"].tolist()
+test_labels = test_data[["primary_label","secondary_label","tertiary_label"]].to_numpy()
 #documents = df["summary"].tolist()
-documents = df["text_cleaned"].tolist()
+documents = df["combined_text"].tolist()
 stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
         'study'])
 
 print("Constructing vocabulary... \n")
 vocabulary, _, _ = preprocessing.create_etm_datasets(
                                     documents,
-                                    min_df=0.001,
-                                    max_df=0.85,
-                                    train_size=1.0,
-                                    stopwords=stop_words,
+                                    test_index=test_index,
+                                    test_labels=test_labels,
+                                    min_df=0.0001,
+                                    max_df=1.0,
                                     stem_words=False,
                                     )
-
 # add seeds into vocabulary
 print("Loading seeds... \n")
 with open(seeds_file) as fin, open(f'{data_file}/oov.txt', 'w') as fout:

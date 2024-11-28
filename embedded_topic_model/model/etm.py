@@ -1,11 +1,8 @@
 from __future__ import print_function
 
-import sys
 import os
-import math
 import wandb
 import torch
-import logging
 import numpy as np
 from typing import List
 from torch import optim
@@ -18,9 +15,6 @@ from embedded_topic_model.utils import data
 from embedded_topic_model.utils import embedding
 from embedded_topic_model.utils import metrics
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler(sys.stdout))
 
 class ETM(object):
     """
@@ -59,6 +53,7 @@ class ETM(object):
     def __init__(
         self,
         vocabulary,
+        logger,
         gamma_prior=None,
         gamma_prior_bin = None,
         lambda_theta = 30.0,
@@ -86,11 +81,12 @@ class ETM(object):
         bow_norm=True,
         num_words=10,
         log_interval=5,
-        visualize_every=10,
+        visualize_every=5,
         device="cpu",
     ):
         self.vocabulary = vocabulary
         self.vocabulary_size = len(self.vocabulary)
+        self.logger = logger
         self.gamma_prior = gamma_prior
         self.gamma_prior_bin = gamma_prior_bin
         self.model_path = model_path
@@ -156,7 +152,7 @@ class ETM(object):
 
     def _get_embeddings_from_original_word2vec(self, embeddings_file):
         if self._get_extension(embeddings_file) == 'txt':
-            logger.info('Reading embeddings from original word2vec TXT file...')
+            self.logger.info('Reading embeddings from original word2vec TXT file...')
             vectors = {}
             iterator = embedding.MemoryFriendlyFileIterator(embeddings_file)
             for line in iterator:
@@ -166,7 +162,7 @@ class ETM(object):
                     vectors[word] = vect
             return vectors
         elif self._get_extension(embeddings_file) == 'bin':
-            logger.info('Reading embeddings from original word2vec BIN file...')
+            self.logger.info('Reading embeddings from original word2vec BIN file...')
             return KeyedVectors.load_word2vec_format(
                 embeddings_file, 
                 binary=True
@@ -184,7 +180,7 @@ class ETM(object):
         if use_c_format_w2vec:
             vectors = self._get_embeddings_from_original_word2vec(embeddings)
         elif isinstance(embeddings, str):
-            logger.info('Reading embeddings from word2vec file...')
+            self.logger.info('Reading embeddings from word2vec file...')
             vectors = KeyedVectors.load(embeddings, mmap='r')
 
         model_embeddings = np.zeros((self.vocabulary_size, self.emb_size))
@@ -226,7 +222,7 @@ class ETM(object):
                 lambd=0.,
                 weight_decay=wdecay)
         else:
-            logger.info('Defaulting to vanilla SGD')
+            self.logger.info('Defaulting to vanilla SGD')
             return optim.SGD(self.model.parameters(), lr=learning_rate)
 
     def _set_data(self, train_data, test_data=None):
@@ -298,7 +294,7 @@ class ETM(object):
         cur_GL2 = round(acc_gl2 / cnt, 2)
         cur_GL = round(acc_gl_loss / cnt, 2)
         cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
-        logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
+        self.logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
                 epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
 
     def get_topics(self, top_n_words=10) -> List[str]:
@@ -357,7 +353,7 @@ class ETM(object):
 
             return neighbors
 
-    def fit(self, train_data, test_data=None, test_labels=None, threshold=0):
+    def fit(self, train_data, test_data=None, label_threshold=0):
         """
         Trains the model with the given training data.
 
@@ -375,27 +371,21 @@ class ETM(object):
         """
         self._set_data(train_data, test_data)
 
-        logger.info(f'Topics before training: {self.get_topics()}')
+        self.logger.info(f'Topics before training: {self.get_topics()}')
 
         wandb.watch(self.model)
 
-        for epoch in range(1, self.epochs):
+        for epoch in range(1, self.epochs+1):
             self._train(epoch)
 
             if (epoch % self.visualize_every == 0):
-                logger.info(f'Topics: {self.get_topics()}')
-                logger.info(f'Hamming loss: {hamming_loss(self.test_labels, self.get_multi_label(threshold=threshold))}')
-                logger.info(f'Precision: {precision_score(y_true=self.test_labels, 
-                                                          y_pred=self.get_multi_label(threshold=threshold),
-                                                          average='samples')}')
-                logger.info(f'Recall: {recall_score(y_true=self.test_labels, 
-                                                          y_pred=self.get_multi_label(threshold=threshold),
-                                                          average='samples')}')
-                logger.info(f'F1 Measure: {f1_score(y_true=self.test_labels, 
-                                                          y_pred=self.get_multi_label(threshold=threshold),
-                                                          average='samples')}')
-                logger.info(f'Topics Coherence: {self.get_topic_coherence()}')
-                logger.info(f'Topic Diversity: {self.get_topic_diversity()}')
+                self.logger.info(f'Topics: {self.get_topics()}')
+                self.logger.info(f"Hamming loss: {hamming_loss(self.test_labels, self.get_multi_label(threshold=label_threshold))}")
+                self.logger.info(f"Precision: {precision_score(y_true=self.test_labels,y_pred=self.get_multi_label(threshold=label_threshold),average='samples')}")
+                self.logger.info(f"Recall: {recall_score(y_true=self.test_labels,y_pred=self.get_multi_label(threshold=label_threshold),average='samples')}")
+                self.logger.info(f"F1 Measure: {f1_score(y_true=self.test_labels,y_pred=self.get_multi_label(threshold=label_threshold),average='samples')}")
+                self.logger.info(f'Topics Coherence: {self.get_topic_coherence()}')
+                self.logger.info(f'Topic Diversity: {self.get_topic_diversity()}')
 
         if self.model_path is not None:
             self._save_model(self.model_path)
