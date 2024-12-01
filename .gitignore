@@ -6,3 +6,4 @@ Data/pain_study/*
 model/pain_study
 *.out
 wandb/
+R_results
