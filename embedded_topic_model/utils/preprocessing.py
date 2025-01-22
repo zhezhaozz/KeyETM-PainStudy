@@ -1,9 +1,11 @@
 import numpy as np
 import torch
+import re
 import nltk
 #nltk.download('punkt')
 #nltk.download('stopwords')
 from scipy import sparse
+from collections import defaultdict
 from typing import Tuple, List
 import nltk.corpus 
 from nltk.stem.porter import PorterStemmer
@@ -146,6 +148,7 @@ def create_bow_dataset(
 
 def create_etm_datasets(
         dataset: List[str],
+        vocab: List[str],
         test_index: List[int],
         test_labels,
         stem_words=True,
@@ -176,7 +179,7 @@ def create_etm_datasets(
         train_dataset (dict): BOW training dataset, split in tokens and counts. Must be used on ETM's fit() method.
         test_dataset (dict): BOW testing dataset, split in tokens and counts. Can be use on ETM's perplexity() method.
     """
-    vectorizer = CountVectorizer(min_df=min_df, max_df=max_df)
+    vectorizer = CountVectorizer(min_df=min_df, max_df=max_df, stop_words=stopwords, token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z_]+\b", vocabulary=vocab)
     vectorized_documents = vectorizer.fit_transform(dataset)
 
     if stopwords is None:
@@ -185,7 +188,7 @@ def create_etm_datasets(
     if stem_words:
         stemmer = PorterStemmer()    
         dataset = [
-            [stemmer.stem(word) for word in document.split()]
+            [stemmer.stem(word) for word in re.split(r'[^\w_]+', document)]
         for document in dataset]
         
         documents_without_stop_words = [
@@ -194,7 +197,7 @@ def create_etm_datasets(
             for document in dataset]
     else:
         documents_without_stop_words = [
-            [word for word in document.split()
+            [word for word in re.split(r'[^\w_]+', document)
                 if word not in stopwords]
             for document in dataset]
 
@@ -230,7 +233,7 @@ def create_etm_datasets(
     # Remove words not in train_data
     vocabulary = list(set([w for idx_d in range(num_docs)
                            for w in documents_without_stop_words[idx_d] if w in word2id]))
-
+    
     # Create dictionary and inverse dictionary
     word2id, id2word = _create_dictionaries(vocabulary)
 
@@ -347,13 +350,26 @@ def nearest_neighbors_m(query, vectors,thre):
     ranks = ranks / denom
     return [(r,i) for r,i in zip(ranks,range(len(ranks))) if r>=thre]
 
+def nearest_neighbors_m_bert(query, vectors):
+    #vectors = limit_embed.vectors
+    #index = vocab.index(word)
+    #query = vectors[index]
+    ranks = vectors.dot(query).squeeze()
+    denom = query.T.dot(query).squeeze()
+    denom = denom * np.sum(vectors**2, 1)
+    denom = np.sqrt(denom)
+    ranks = ranks / denom
+    rank_lst = [(r,i) for r,i in zip(ranks,range(len(ranks)))]
+    ranks_sorted = sorted(rank_lst, key=lambda x: x[0], reverse=True)
+    return ranks_sorted
 
 
-def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings,threshold):
+def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings,threshold,logger):
     limit_embed = initialize_embeddings(vocab,embeddings)
     gamma_prior = np.zeros((len(vocab),n_latent))
     gamma_prior_bin = np.zeros((bs,len(vocab), n_latent))
     for idx_topic, seed_topic in enumerate(seedwords):
+        print(seed_topic)
         topic_vect = []
         for idx_word, seed_word in enumerate(seed_topic):
             #print(seed_word in vocab)
@@ -364,16 +380,66 @@ def get_gamma_prior(vocab,seedwords,n_latent,bs,embeddings,threshold):
                 gamma_prior[idx_vocab, idx_topic] = 1.0 
                 gamma_prior_bin[:, idx_vocab, :]=1.0
             else:
+                print(f"{seed_word} not in vocabulary \n")
                 pass
             topic_vect.append(embeddings[seed_word])
         tv = sum(topic_vect)/len(topic_vect)
         rank = nearest_neighbors_m(tv, limit_embed,threshold)
         #print(rank)
+        topic_num = 0
+        first_15 = []
         for item in rank:
+            if topic_num < 15:
+                first_15.append(vocab[item[1]])
             if(gamma_prior[item[1], idx_topic]!=1.0):
                  #gamma_prior[item[1], idx_topic]=round(item[0],2)
                  gamma_prior[item[1], idx_topic]=1.0
                  gamma_prior_bin[:, item[1], :]= 1.0
+                 topic_num += 1
+        first_15_words=",".join(first_15)
+        logger.info(f"Topic {idx_topic} prior is: {first_15_words}")
+        logger.info(f"Topic {idx_topic} prior size is {topic_num}")
+    #print(gamma_prior[:250])
+    return torch.from_numpy(gamma_prior),torch.from_numpy(gamma_prior_bin)
+
+def get_gamma_prior_bert(vocab,seedwords,n_latent,bs,embeddings,extra_seeds,topn=None,logger=None):
+    limit_embed = initialize_embeddings(vocab,embeddings)
+    gamma_prior = np.zeros((len(vocab),n_latent))
+    gamma_prior_bin = np.zeros((bs,len(vocab), n_latent))
+    for idx_topic, seed_topic in enumerate(seedwords):
+        if extra_seeds:
+            topic_vect = []
+        for idx_word, seed_word in enumerate(seed_topic):
+            if seed_word in vocab:
+                idx_vocab = vocab.index(seed_word)
+                gamma_prior[idx_vocab, idx_topic] = 1.0 
+                gamma_prior_bin[:, idx_vocab, idx_topic]=1.0
+            else:
+                print(f"{seed_word} not in vocabulary \n")
+                pass
+            if extra_seeds:
+                topic_vect.append(embeddings[seed_word])
+        if extra_seeds:
+            assert topn is not None
+            tv = sum(topic_vect)/len(topic_vect)
+            ranks_sorted = nearest_neighbors_m_bert(tv, limit_embed)
+            #print(rank)
+            topic_num = 0
+            first_15 = []
+            for item in ranks_sorted:
+                if topic_num < 15:
+                    first_15.append(vocab[item[1]])
+                if topic_num > topn:
+                    break
+                if(gamma_prior[item[1], idx_topic]!=1.0):
+                    #gamma_prior[item[1], idx_topic]=round(item[0],2)
+                    gamma_prior[item[1], idx_topic]=1.0
+                    gamma_prior_bin[:, item[1], idx_topic]= 1.0
+                    topic_num += 1
+            first_15_words=",".join(first_15)
+            if logger is not None:
+                logger.info(f"Topic {idx_topic} prior is: {first_15_words}")
+                logger.info(f"Topic {idx_topic} prior size is {topic_num}")
     #print(gamma_prior[:250])
     return torch.from_numpy(gamma_prior),torch.from_numpy(gamma_prior_bin)
     

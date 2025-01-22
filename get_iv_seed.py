@@ -5,7 +5,7 @@ import argparse
 parser = argparse.ArgumentParser(description='main', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dataset', default='pain_study')
 parser.add_argument('--model', default='bert')
-parser.add_argument('--num_iter', default=2, type=int)
+parser.add_argument('--num_iter', default=0, type=int)
 parser.add_argument('--topm', default=10, type=int)
 args = parser.parse_args()
 
@@ -36,30 +36,31 @@ with open(bert_file) as fin:
 		word2emb[word] = emb
 
 oov = set()
-with open(f'{data_file}/oov.txt') as fin:
+with open(f'{data_file}/oov_{args.model}.txt') as fin:
 	for line in fin:
 		data = line.strip()
 		oov.add(data)
 
 if num_iter == 0:
-	out_file = f'{data_file}/keywords/keywords_1.txt'
+	out_file = f'{data_file}/keywords/keywords_{model}_1.txt'
+	num_iter += 1
 else:
 	num_iter += 1
 	out_file = f'{data_file}/keywords/keywords_{model}_{num_iter}.txt'
 
-print("Retrieving in-vocabulary seeds using {model} with {num_iter} iterations \n")
-for iter in range(num_iter):
-	print(f"Iteration: {iter} \n")
-	with open(out_file, 'w') as fout:
-		for idx, topic in enumerate(topics):
-			word2score = defaultdict(float)
-			for word in word2emb:
-				if word in oov:
-					continue
-				for term in topic:
-					word2score[word] += np.dot(word2emb[word], word2emb[term])
-			score_sorted = sorted(word2score.items(), key=lambda x: x[1], reverse=True)[:100]
-			new_topic = [x[0] for x in score_sorted][:topm]
-			topics[idx] = new_topic
-			print(','.join(new_topic)+'\n')
-			fout.write(','.join(new_topic)+'\n')
+with open(out_file, 'w') as fout:
+	for idx, topic in enumerate(topics):
+		word2score = defaultdict(float)
+		new_topic = []
+		for word in word2emb:
+			if word in oov or word in topic:
+				continue
+			for term in topic:
+				if term not in oov and term not in new_topic:
+					new_topic.append(term) 
+				word2score[word] += np.dot(word2emb[word], word2emb[term])
+		score_sorted = sorted(word2score.items(), key=lambda x: x[1], reverse=True)[:100]
+		new_topic = new_topic + [x[0] for x in score_sorted]
+		new_topic = new_topic[:topm]
+		topics[idx] = new_topic
+		fout.write(','.join(new_topic)+'\n')

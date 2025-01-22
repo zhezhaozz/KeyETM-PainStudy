@@ -5,7 +5,9 @@ import yaml
 import wandb
 import argparse
 import pickle
+import nltk
 import os
+import re
 import os.path as osp
 import pandas as pd
 import numpy as np
@@ -13,6 +15,8 @@ import numpy as np
 from embedded_topic_model.model.etm import ETM
 from embedded_topic_model.utils import preprocessing
 from gensim.models import KeyedVectors
+from collections import defaultdict
+from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 
 def main():
@@ -49,7 +53,7 @@ def main():
     
     lr = config_model['lr']
     if opt.use_iv:
-        seeds_path = osp.join(config_dataset['folder-path'], f"keywords/keywords_{opt.emb}_5.txt")
+        seeds_path = osp.join(config_dataset['folder-path'], f"keywords/keywords_{opt.emb}_1.txt")
         res_data_path = osp.join(
             config_dataset['folder-path'], "experiments/bert_iv")
     else:
@@ -78,13 +82,31 @@ def main():
     test_labels = test_data[lab_cols].to_numpy()
     seedwords = preprocessing.read_seedword(seeds_path, stem_words=False)
     #documents = df["summary"].tolist()
-    documents = pain_grants["combined_text"].tolist()
+    documents = pain_grants["abstracts"].tolist()
+    cnt = defaultdict(int)
+    for abs in documents:
+        data = re.split(r'[^a-zA-Z_]+', abs)
+        for word in data:
+            cnt[word] += 1
+
+    min_count = 3
+    vocab = set()
+    for word in cnt:
+        if cnt[word] >= min_count and word.replace('_', ' ').strip() != '':
+            vocab.add(word)
+    
+    stop_words = nltk.corpus.stopwords.words('english')
+    stop_words =stop_words+["abstract", "summary", "aim", "aims", "project"]
+    print(stop_words)
+
     vocabulary, train_dataset, test_dataset = preprocessing.create_etm_datasets(
                                     documents,
+                                    vocab,
                                     test_index=test_index,
                                     test_labels=test_labels,
-                                    min_df=0.005,
-                                    max_df=0.9,
+                                    stopwords=stop_words,
+                                    min_df=0.001,
+                                    max_df=0.75,
                                     stem_words=False,
                                     )
     print("done \n")
@@ -92,13 +114,22 @@ def main():
     #create model
     print("Load embeddings... \n")
     if opt.use_iv:
-        embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}_iv")
-        embeddings_raw = KeyedVectors.load(embeddings_file)
+        embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}.txt")
         embeddings_mapping = {}
-        for word in embeddings_raw.index_to_key:
-            emb = embeddings_raw[word]
-            emb = emb / np.linalg.norm(emb)
-            embeddings_mapping[word] = emb
+        with open(embeddings_file) as fin:
+            for line in fin:
+                data = line.strip().split()
+                if len(data) != 769:
+                    continue
+                word = data[0]
+                emb = np.array([float(x) for x in data[1:]])
+                embeddings_mapping[word] = emb
+        #embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}_iv")
+        #embeddings_raw = KeyedVectors.load(embeddings_file)
+        #embeddings_mapping = {}
+        #for word in embeddings_raw.index_to_key:
+        #    emb = embeddings_raw[word]
+        #    embeddings_mapping[word] = emb
     else:
         embeddings_file = osp.join(config_dataset['folder-path'], f"embeddings/embedding_{opt.emb}.txt")
         embeddings_mapping = {}
@@ -109,11 +140,15 @@ def main():
                     continue
                 word = data[0]
                 emb = np.array([float(x) for x in data[1:]])
-                emb = emb / np.linalg.norm(emb)
                 embeddings_mapping[word] = emb
     
     print("Set up prior matrix... \n")
-    gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.90)
+    if opt.use_iv:
+        gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior_bert(vocabulary,seedwords,nt,bs,embeddings_mapping,False,25,logger)
+        #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior_bert(vocabulary,seedwords,nt,bs)
+    else:
+        #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,embeddings_mapping,0.9,logger)
+        gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior_bert(vocabulary,seedwords,nt,bs,embeddings_mapping,True,25,logger)
 
     #print(gamma_prior[:100])
 
@@ -154,7 +189,7 @@ def main():
     write_to_file(res_data_path,f'{opt.emb}_doc_topic_dist.csv',etm_instance.get_document_topic_dist(),opt.emb)
     write_to_file(res_data_path,f'{opt.emb}_word_matrix.csv',word_matrix,opt.emb)
     write_in_format(res_data_path,f'{opt.emb}_formatted_topic_word.pickle',word_matrix,topic_word)        
-    write_topic_excel(os.path.join(res_data_path,f'{opt.emb}_formatted_topic_word.pickle'), res_data_path)    
+    write_topic_excel(os.path.join(res_data_path,f'{opt.emb}_formatted_topic_word.pickle'), res_data_path) 
 
 def write_topic_excel(pickle_file, result_folder):
     # open formatted topic words

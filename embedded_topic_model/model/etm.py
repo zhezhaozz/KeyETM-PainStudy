@@ -65,7 +65,7 @@ class ETM(object):
         num_topics=50,
         rho_size=768,
         emb_size=768,
-        t_hidden_size=256,
+        t_hidden_size=128,
         theta_act='relu',
         train_embeddings=False,
         lr=0.005,
@@ -175,7 +175,7 @@ class ETM(object):
         embeddings,
         use_c_format_w2vec=False
     ):
-        vectors = embeddings if isinstance(embeddings, KeyedVectors) else {}
+        #vectors = embeddings if isinstance(embeddings, KeyedVectors) else {}
 
         if use_c_format_w2vec:
             vectors = self._get_embeddings_from_original_word2vec(embeddings)
@@ -187,8 +187,9 @@ class ETM(object):
 
         for i, word in enumerate(self.vocabulary):
             try:
-                model_embeddings[i] = vectors[word]
+                model_embeddings[i] = embeddings[word]
             except KeyError:
+                print(word)
                 model_embeddings[i] = np.random.normal(
                     scale=0.6, size=(self.emb_size, ))
         return torch.from_numpy(model_embeddings.astype(np.float32)).to(self.device)
@@ -294,8 +295,8 @@ class ETM(object):
         cur_GL2 = round(acc_gl2 / cnt, 2)
         cur_GL = round(acc_gl_loss / cnt, 2)
         cur_real_loss = round(cur_loss + cur_kl_theta + cur_GL, 2)
-        self.logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - PLoss: {} - NELBO: {}'.format(
-                epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL, cur_real_loss))
+        self.logger.info('Epoch {} - Learning Rate: {} - KL theta: {} - Rec loss: {} - P_theta: {} - P_alpha: {} - NELBO: {}'.format(
+                epoch, self.optimizer.param_groups[0]['lr'], cur_kl_theta, cur_loss, cur_GL1, cur_GL2, cur_real_loss))
 
     def get_topics(self, top_n_words=10) -> List[str]:
         """
@@ -600,7 +601,6 @@ class ETM(object):
                 for idx in top_3:
                     if doc_topic[r,idx] > threshold:
                         prediction[r,idx] = 1
-
             return prediction
 
 

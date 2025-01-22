@@ -51,23 +51,23 @@ def get_num_lines(file_path):
 
 file = f'Data/{args.dataset}/{args.text_file}'
 documents = pd.read_csv(file)
-combined_text = documents['combined_text']
-combined_text = ' '.join(combined_text) 
+combined_text = documents['combined_text'].to_list()
 vocab = {}
 inv_vocab = {}
 sentences = []
 
-for sent in sent_tokenize(combined_text.strip().replace(' .', '.')):
-    sent_toks = [tok for tok in sent.replace('.', ' .').split(' ') if tok != '']
-    tok_enc = tokenizer([tok.replace('_', ' ') for tok in sent_toks], add_special_tokens=False)['input_ids']
-    indices = [1] + (np.cumsum([len(ids) for ids in tok_enc]) + 1).tolist()
-    flat_ids = [tokenizer.cls_token_id] + reduce(lambda x, y: x + y, tok_enc, []) + [tokenizer.sep_token_id]
-    if len(flat_ids) > 512: continue
-    for tok in sent_toks:
-        if tok not in vocab:
-            vocab[tok] = len(vocab)
-            inv_vocab[vocab[tok]] = tok
-    sentences.append((flat_ids, [vocab[tok] for tok in sent_toks], indices))
+for doc in combined_text:
+    for sent in sent_tokenize(doc):
+        sent_toks = [tok for tok in sent.replace('.', ' .').split(' ') if tok != '']
+        tok_enc = tokenizer([tok for tok in sent_toks], add_special_tokens=False)['input_ids']
+        indices = [1] + (np.cumsum([len(ids) for ids in tok_enc]) + 1).tolist()
+        flat_ids = [tokenizer.cls_token_id] + reduce(lambda x, y: x + y, tok_enc, []) + [tokenizer.sep_token_id]
+        if len(flat_ids) > 512: continue
+        for tok in sent_toks:
+            if tok not in vocab:
+                vocab[tok] = len(vocab)
+                inv_vocab[vocab[tok]] = tok
+        sentences.append((flat_ids, [vocab[tok] for tok in sent_toks], indices))
 
 batch_size = args.batch_size
 iterations = int(len(sentences)/batch_size) + (0 if len(sentences) % batch_size == 0 else 1)

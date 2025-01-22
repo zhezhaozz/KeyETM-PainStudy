@@ -1,0 +1,21 @@
+name: keyetm_pain
+channels:
+  - defaults
+dependencies:
+  - conda-forge::wandb
+  - gensim
+  - ipykernel
+  - matplotlib
+  - nltk
+  - numpy
+  - openpyxl
+  - pandas
+  - plotly::plotly
+  - python=3.10
+  - pytorch::pytorch
+  - scikit-learn
+  - scipy[version='<1.13']
+  - torchaudio
+  - torchvision
+  - conda-forge::transformers
+  - torchmetrics

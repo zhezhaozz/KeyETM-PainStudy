@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import torch
 import pandas as pd
 import numpy as np
@@ -35,7 +36,7 @@ else:
 
 if args.dataset == 'pain_study':
 	data_file = f'Data/{args.dataset}'
-	corpus_file = f'Data/{args.dataset}/pain_preprocessed_data.csv'
+	corpus_file = f'Data/{args.dataset}/test_data.csv'
 	test_file = f'Data/{args.dataset}/test_data.csv'
 else:
 	corpus_file = f'Data/{args.dataset}.csv'
@@ -50,33 +51,50 @@ model.eval()
 
 # load data
 print("Loading data... \n")
-df = pd.read_csv(corpus_file)
+grants = pd.read_csv(corpus_file)
+abstracts = grants['abstracts'].to_list()
+cnt = defaultdict(int)
+for abs in abstracts:
+	data = re.split(r'[^a-zA-Z_]+', abs)
+	for word in data:
+		cnt[word] += 1
+
+min_count = 3
+vocabulary = set()
+for word in cnt:
+	if cnt[word] >= min_count and word.replace('_', ' ').strip() != '':
+		vocabulary.add(word)
+
+print(f"The size of vocabulary is {len(vocabulary)}")
+
 test_data = pd.read_csv(test_file)
 test_index = test_data["Index"].tolist()
-test_labels = test_data[["primary_label","secondary_label","tertiary_label"]].to_numpy()
+lab_cols = [col for col in test_data.columns if col.startswith("label_")]
+lab_cols = sorted(lab_cols)
+test_labels = test_data[lab_cols].to_numpy()
 #documents = df["summary"].tolist()
-documents = df["combined_text"].tolist()
+#documents = df["abstracts"].tolist()
 stop_words = text.ENGLISH_STOP_WORDS.union(['narrative', 'description', 'project', 'abstract', 'summary', 'relevance', 
         'study'])
 
 print("Constructing vocabulary... \n")
-vocabulary, _, _ = preprocessing.create_etm_datasets(
-                                    documents,
-                                    test_index=test_index,
-                                    test_labels=test_labels,
-                                    min_df=0.0001,
-                                    max_df=1.0,
-                                    stem_words=False,
-                                    )
+#vocabulary, _, _ = preprocessing.create_etm_datasets(
+#                                    documents,
+#                                    test_index=test_index,
+#                                    test_labels=test_labels,
+#                                    min_df=0.0001,
+#                                    max_df=1.0,
+#                                    stem_words=False,
+#                                   )
 # add seeds into vocabulary
 print("Loading seeds... \n")
-with open(seeds_file) as fin, open(f'{data_file}/oov.txt', 'w') as fout:
+with open(seeds_file) as fin, open(f'{data_file}/oov_{args.model}.txt', 'w') as fout:
 	for line in fin:
 		seeds = line.strip().split(',')
 		for seed in seeds:
 			if seed not in vocabulary:
 				fout.write(seed+'\n')
-				vocabulary.append(seed)
+				vocabulary.add(seed)
 
 # create embeddings for words
 print(f"create embeddings in {args.model} space...")

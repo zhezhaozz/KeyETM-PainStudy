@@ -69,7 +69,7 @@ def main():
                                     test_index=test_index,
                                     test_labels=test_labels,
                                     min_df=0.005,
-                                    max_df=0.9,
+                                    max_df=0.75,
                                     stem_words=False,
                                     )
     print("done \n")
@@ -136,8 +136,8 @@ def main():
                    lr = lr,
                    gamma_prior = gamma_prior,
                    gamma_prior_bin=gamma_prior_bin,
-                   rho_size=emb_size,
-                   emb_size=emb_size,
+                   rho_size=200,
+                   emb_size=200,
                    train_embeddings=False)
     
     #gamma_prior,gamma_prior_bin = preprocessing.get_gamma_prior(vocabulary,seedwords,nt,bs,etm_instance.embeddings)
